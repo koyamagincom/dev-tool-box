@@ -138,6 +138,13 @@ fun MainDashboard(
                         label = { Text("Logcat") },
                         modifier = Modifier.testTag("tab_logcat")
                     )
+                    NavigationBarItem(
+                        selected = selectedTab == 4,
+                        onClick = { selectedTab = 4 },
+                        icon = { Icon(Icons.Default.SmartToy, contentDescription = "Tự động hoá") },
+                        label = { Text("Tự động") },
+                        modifier = Modifier.testTag("tab_automation")
+                    )
                 }
             }
         }
@@ -152,6 +159,7 @@ fun MainDashboard(
                 1 -> HardwareMonitorScreen(viewModel)
                 2 -> CodePlaygroundScreen(viewModel)
                 3 -> LogcatViewerScreen(viewModel)
+                4 -> DeviceControlAutomationScreen(viewModel)
             }
         }
     }

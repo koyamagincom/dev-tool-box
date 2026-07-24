@@ -1,6 +1,6 @@
 {
   "name": "DevToolbox",
-  "description": "A rapid developer utility featuring quick system developer toggles, settings shortcuts, an on-device code playground with AI analysis, and an intuitive logcat viewer.",
+  "description": "Bộ công cụ phát triển & tự động hoá Android chuyên nghiệp: Điều khiển thiết bị qua Wireless ADB, Macro Auto-Clicker cử chỉ không cần PC, và Trợ lý AI Gemini lập kịch bản tự động hoá thông minh.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

@@ -101,4 +101,48 @@ object GeminiClient {
             "Lỗi kết nối hoặc API: ${e.localizedMessage ?: e.message}"
         }
     }
+
+    suspend fun planDeviceAutomationAction(userPrompt: String): String {
+        val apiKey = BuildConfig.GEMINI_API_KEY
+        if (apiKey.isEmpty() || apiKey == "MY_GEMINI_API_KEY") {
+            return "Vui lòng cấu hình GEMINI_API_KEY trong mục Secrets của AI Studio để dùng AI Automation Agent."
+        }
+
+        val prompt = """
+            Bạn là Trợ lý AI Điều khiển & Tự động hoá Thiết bị Android (Android AI Device Agent).
+            Người dùng yêu cầu thực hiện tác vụ tự động hoá trên điện thoại:
+            "$userPrompt"
+
+            Hãy phân tích yêu cầu này và tạo ra KỊCH BẢN TỰ ĐỘNG HÓA chi tiết (bằng Tiếng Việt).
+            Hãy xuất ra kết quả được định dạng Markdown rõ ràng gồm:
+
+            🎯 **MỤC TIÊU TÁC VỤ**: Tóm tắt hành động cần thực hiện.
+
+            🤖 **KỊCH BẢN THỰC THI (AUTOMATION STEPS)**:
+            Liệt kê từng bước theo thứ tự thực hiện:
+            - **Bước 1**: [Hành động] - Ví dụ: Mở ứng dụng `android.settings.SETTINGS`
+            - **Bước 2**: [Cử chỉ / Lệnh ADB / Chờ] - Ví dụ: `adb shell input tap 540 1200` hoặc Cử chỉ vuốt màn hình
+            - **Bước 3**: [Xác nhận trạng thái]
+
+            ⌨️ **LỆNH ADB MẪU (NẾU CÓ)**:
+            ```bash
+            # Lệnh thực thi tương ứng
+            ```
+
+            ⚡ **LƯU Ý THỰC HIỆN**: Cảnh báo về quyền Accessibility Service, Shizuku hoặc kết nối ADB Wireless.
+        """.trimIndent()
+
+        val request = GenerateContentRequest(
+            contents = listOf(Content(parts = listOf(Part(text = prompt)))),
+            systemInstruction = Content(parts = listOf(Part(text = "Bạn là trợ lý AI chuyên nghiệp tự động hóa và điều khiển thiết bị Android.")))
+        )
+
+        return try {
+            val response = apiService.generateContent(apiKey, request)
+            response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text
+                ?: "Không nhận được phản hồi từ AI Agent."
+        } catch (e: Exception) {
+            "Lỗi kết nối AI: ${e.localizedMessage ?: e.message}"
+        }
+    }
 }
