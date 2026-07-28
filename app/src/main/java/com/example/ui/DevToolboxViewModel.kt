@@ -940,6 +940,16 @@ class DevToolboxViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
+    fun shareAdbToAgy() {
+        viewModelScope.launch(Dispatchers.IO) {
+            appendShellLog("📡 Đang khởi động ADB Bridge (Force TCP Port 5555 cho Termux / AGY Assistant)...")
+            val (success, message) = com.example.automation.AdbBridge.shareAdbToAgy(5555)
+            _isAdbConnected.value = true
+            appendShellLog("➜ $message")
+            appendShellLog("💡 AGY / Termux bây giờ có thể kết nối bằng: adb connect 127.0.0.1:5555")
+        }
+    }
+
     fun executeShellCommand(cmd: String = _customShellCommand.value) {
         if (cmd.isBlank()) return
         viewModelScope.launch(Dispatchers.IO) {

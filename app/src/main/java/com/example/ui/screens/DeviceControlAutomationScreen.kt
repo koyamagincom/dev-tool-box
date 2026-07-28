@@ -27,8 +27,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -667,6 +669,9 @@ fun AddMacroActionDialog(
 
 @Composable
 fun WirelessAdbTerminalTab(viewModel: DevToolboxViewModel) {
+    val context = LocalContext.current
+    val clipboardManager = LocalClipboardManager.current
+
     val ip by viewModel.wirelessAdbIp.collectAsStateWithLifecycle()
     val port by viewModel.wirelessAdbPort.collectAsStateWithLifecycle()
     val pairingCode by viewModel.wirelessAdbPairingCode.collectAsStateWithLifecycle()
@@ -762,14 +767,101 @@ fun WirelessAdbTerminalTab(viewModel: DevToolboxViewModel) {
                         shape = RoundedCornerShape(12.dp)
                     )
 
-                    Button(
-                        onClick = { viewModel.connectWirelessAdb() },
-                        modifier = Modifier.fillMaxWidth().testTag("connect_adb_button"),
-                        shape = RoundedCornerShape(12.dp)
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        Icon(Icons.Default.Power, contentDescription = null)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Kết Nối Wireless ADB")
+                        Button(
+                            onClick = { viewModel.connectWirelessAdb() },
+                            modifier = Modifier.weight(1f).testTag("connect_adb_button"),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Icon(Icons.Default.Power, contentDescription = null)
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Kết Nối ADB")
+                        }
+
+                        Button(
+                            onClick = { viewModel.shareAdbToAgy() },
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary),
+                            modifier = Modifier.weight(1f).testTag("share_adb_agy_button"),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Icon(Icons.Default.Share, contentDescription = null)
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Share ADB to AGY (5555)")
+                        }
+                    }
+                }
+            }
+        }
+
+        item {
+            ElevatedCard(
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.elevatedCardColors(
+                    containerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.3f)
+                ),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.IntegrationInstructions,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.tertiary
+                        )
+                        Text(
+                            text = "🤖 Automation Script Orchestration API (AGY / Termux)",
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.tertiary
+                        )
+                    }
+
+                    Text(
+                        text = "AGY Assistant & Termux có thể gửi lệnh điều phối trực tiếp qua broadcast:",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    val codeExample = """
+                        # 1. Chạm màn hình
+                        am broadcast -a com.aistudio.devtoolbox.ACTION_AUTO --es action tap --ei x 500 --ei y 1000
+                        
+                        # 2. Gõ văn bản
+                        am broadcast -a com.aistudio.devtoolbox.ACTION_AUTO --es action text --es content "hello"
+                        
+                        # 3. Phím bấm (Code 66 = Enter, 3 = Home, 4 = Back)
+                        am broadcast -a com.aistudio.devtoolbox.ACTION_AUTO --es action key --ei code 66
+                        
+                        # 4. Mở ứng dụng
+                        am broadcast -a com.aistudio.devtoolbox.ACTION_AUTO --es action open --es pkg "com.android.settings"
+                        
+                        # 5. Chụp ảnh màn hình
+                        am broadcast -a com.aistudio.devtoolbox.ACTION_AUTO --es action screenshot --es path "/sdcard/DCIM/AGY/out.png"
+                    """.trimIndent()
+
+                    Surface(
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        SelectionContainer {
+                            Text(
+                                text = codeExample,
+                                style = MaterialTheme.typography.bodySmall,
+                                fontFamily = FontFamily.Monospace,
+                                modifier = Modifier.padding(12.dp),
+                                fontSize = 11.sp
+                            )
+                        }
                     }
                 }
             }
@@ -806,8 +898,23 @@ fun WirelessAdbTerminalTab(viewModel: DevToolboxViewModel) {
                                 fontSize = 13.sp
                             )
                         }
-                        IconButton(onClick = { viewModel.clearShellLogs() }) {
-                            Icon(Icons.Default.Delete, contentDescription = "Clear", tint = Color.LightGray)
+                        Row {
+                            IconButton(
+                                onClick = {
+                                    if (logs.isNotEmpty()) {
+                                        val fullLog = logs.joinToString("\n")
+                                        clipboardManager.setText(AnnotatedString(fullLog))
+                                        Toast.makeText(context, "📋 Đã sao chép toàn bộ log terminal!", Toast.LENGTH_SHORT).show()
+                                    } else {
+                                        Toast.makeText(context, "Chưa có log nào để sao chép", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            ) {
+                                Icon(Icons.Default.ContentCopy, contentDescription = "Copy Log", tint = Color(0xFF00BCD4))
+                            }
+                            IconButton(onClick = { viewModel.clearShellLogs() }) {
+                                Icon(Icons.Default.Delete, contentDescription = "Clear", tint = Color.LightGray)
+                            }
                         }
                     }
 
@@ -820,23 +927,25 @@ fun WirelessAdbTerminalTab(viewModel: DevToolboxViewModel) {
                             .background(Color(0xFF121212), shape = RoundedCornerShape(8.dp))
                             .padding(8.dp)
                     ) {
-                        LazyColumn(
-                            state = listState,
-                            modifier = Modifier.fillMaxSize(),
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            items(logs) { line ->
-                                Text(
-                                    text = line,
-                                    color = when {
-                                        line.startsWith("$") -> Color(0xFF4CAF50)
-                                        line.startsWith("➜") -> Color(0xFF00BCD4)
-                                        line.contains("❌") || line.contains("Error") -> Color(0xFFFF5252)
-                                        else -> Color.LightGray
-                                    },
-                                    fontFamily = FontFamily.Monospace,
-                                    fontSize = 12.sp
-                                )
+                        SelectionContainer {
+                            LazyColumn(
+                                state = listState,
+                                modifier = Modifier.fillMaxSize(),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                items(logs) { line ->
+                                    Text(
+                                        text = line,
+                                        color = when {
+                                            line.startsWith("$") -> Color(0xFF4CAF50)
+                                            line.startsWith("➜") -> Color(0xFF00BCD4)
+                                            line.contains("❌") || line.contains("Error") -> Color(0xFFFF5252)
+                                            else -> Color.LightGray
+                                        },
+                                        fontFamily = FontFamily.Monospace,
+                                        fontSize = 12.sp
+                                    )
+                                }
                             }
                         }
                     }
