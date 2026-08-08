@@ -48,7 +48,7 @@ fun DeviceControlAutomationScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    var selectedSubMode by remember { mutableIntStateOf(0) } // 0: AI Agent, 1: Macro Clicker, 2: Wireless ADB & Shell, 3: Quick Actions
+    var selectedSubMode by remember { mutableIntStateOf(0) } // 0: AI Agent, 1: Touch Macro
 
     Column(
         modifier = modifier
@@ -56,9 +56,8 @@ fun DeviceControlAutomationScreen(
             .background(MaterialTheme.colorScheme.background)
     ) {
         // Mode Selector Header Tabs
-        ScrollableTabRow(
+        TabRow(
             selectedTabIndex = selectedSubMode,
-            edgePadding = 16.dp,
             containerColor = MaterialTheme.colorScheme.surface,
             contentColor = MaterialTheme.colorScheme.primary,
             divider = { HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)) }
@@ -66,30 +65,16 @@ fun DeviceControlAutomationScreen(
             Tab(
                 selected = selectedSubMode == 0,
                 onClick = { selectedSubMode = 0 },
-                text = { Text("🤖 AI Automation") },
+                text = { Text("🤖 AI Assistant") },
                 icon = { Icon(Icons.Default.AutoAwesome, contentDescription = "AI Agent") },
                 modifier = Modifier.testTag("subtab_ai_agent")
             )
             Tab(
                 selected = selectedSubMode == 1,
                 onClick = { selectedSubMode = 1 },
-                text = { Text("⚡ Macro Clicker") },
+                text = { Text("⚡ Touch Macro") },
                 icon = { Icon(Icons.Default.TouchApp, contentDescription = "Macro") },
                 modifier = Modifier.testTag("subtab_macro")
-            )
-            Tab(
-                selected = selectedSubMode == 2,
-                onClick = { selectedSubMode = 2 },
-                text = { Text("🔌 Wireless ADB") },
-                icon = { Icon(Icons.Default.Terminal, contentDescription = "Terminal") },
-                modifier = Modifier.testTag("subtab_adb")
-            )
-            Tab(
-                selected = selectedSubMode == 3,
-                onClick = { selectedSubMode = 3 },
-                text = { Text("🚀 Phím Tắt Tác Vụ") },
-                icon = { Icon(Icons.Default.Widgets, contentDescription = "Quick Actions") },
-                modifier = Modifier.testTag("subtab_quick_actions")
             )
         }
 
@@ -97,8 +82,6 @@ fun DeviceControlAutomationScreen(
             when (selectedSubMode) {
                 0 -> AiAutomationTab(viewModel)
                 1 -> MacroAutoClickerTab(viewModel)
-                2 -> WirelessAdbTerminalTab(viewModel)
-                3 -> QuickActionsTab(viewModel)
             }
         }
     }
@@ -997,122 +980,3 @@ fun WirelessAdbTerminalTab(viewModel: DevToolboxViewModel) {
         }
     }
 }
-
-@Composable
-fun QuickActionsTab(viewModel: DevToolboxViewModel) {
-    val context = LocalContext.current
-
-    val actionCards = listOf(
-        QuickActionItem(
-            title = "Cài Đặt Nhà Phát Triển",
-            desc = "Mở trực tiếp trang bật tắt Gỡ Lỗi USB & ADB",
-            icon = Icons.Default.DeveloperMode,
-            intentAction = Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS
-        ),
-        QuickActionItem(
-            title = "Dịch Vụ Hỗ Trợ Accessibility",
-            desc = "Cấp quyền tự động hoá cử chỉ & chạm màn hình",
-            icon = Icons.Default.AccessibilityNew,
-            intentAction = Settings.ACTION_ACCESSIBILITY_SETTINGS
-        ),
-        QuickActionItem(
-            title = "Cài Đặt Trợ Lý AI & Giọng Nói",
-            desc = "Quản lý ứng dụng trợ lý tự động trên hệ thống",
-            icon = Icons.Default.Mic,
-            intentAction = Settings.ACTION_VOICE_INPUT_SETTINGS
-        ),
-        QuickActionItem(
-            title = "Ứng Dụng Mặc Định & Quyền",
-            desc = "Xem và cấp quyền hệ thống cho các app",
-            icon = Icons.Default.ManageAccounts,
-            intentAction = Settings.ACTION_MANAGE_APPLICATIONS_SETTINGS
-        ),
-        QuickActionItem(
-            title = "Tối Ưu Hoá Pin & Nguồn",
-            desc = "Cấu hình duy trì ứng dụng chạy ngầm tự động",
-            icon = Icons.Default.BatterySaver,
-            intentAction = Settings.ACTION_BATTERY_SAVER_SETTINGS
-        ),
-        QuickActionItem(
-            title = "Mạng & Wi-Fi Nâng Cao",
-            desc = "Xem thông tin IP & kết nối ADB không dây",
-            icon = Icons.Default.Wifi,
-            intentAction = Settings.ACTION_WIFI_SETTINGS
-        )
-    )
-
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        item {
-            Text(
-                text = "Phím Tắt Điều Khiển Hệ Thống",
-                fontWeight = FontWeight.Bold,
-                style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.padding(bottom = 4.dp)
-            )
-        }
-
-        items(actionCards) { item ->
-            Card(
-                shape = RoundedCornerShape(12.dp),
-                onClick = {
-                    try {
-                        context.startActivity(Intent(item.intentAction))
-                    } catch (e: Exception) {
-                        Toast.makeText(context, "Không thể mở trang cài đặt: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
-                    }
-                },
-                modifier = Modifier.fillMaxWidth().testTag("quick_action_${item.title}")
-            ) {
-                Row(
-                    modifier = Modifier.padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    Surface(
-                        shape = CircleShape,
-                        color = MaterialTheme.colorScheme.primaryContainer,
-                        modifier = Modifier.size(44.dp)
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                imageVector = item.icon,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onPrimaryContainer
-                            )
-                        }
-                    }
-
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = item.title,
-                            fontWeight = FontWeight.Bold,
-                            style = MaterialTheme.typography.titleSmall
-                        )
-                        Text(
-                            text = item.desc,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-
-                    Icon(
-                        imageVector = Icons.Default.ChevronRight,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.outline
-                    )
-                }
-            }
-        }
-    }
-}
-
-data class QuickActionItem(
-    val title: String,
-    val desc: String,
-    val icon: androidx.compose.ui.graphics.vector.ImageVector,
-    val intentAction: String
-)

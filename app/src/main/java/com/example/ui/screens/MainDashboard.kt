@@ -113,37 +113,37 @@ fun MainDashboard(
                     NavigationBarItem(
                         selected = selectedTab == 0,
                         onClick = { selectedTab = 0 },
-                        icon = { Icon(Icons.Default.DeveloperMode, contentDescription = "Cấu hình") },
+                        icon = { Icon(Icons.Default.DeveloperMode, contentDescription = "Thiết lập") },
                         label = { Text("Thiết lập") },
-                        modifier = Modifier.testTag("tab_status")
+                        modifier = Modifier.testTag("tab_dev_settings")
                     )
                     NavigationBarItem(
                         selected = selectedTab == 1,
                         onClick = { selectedTab = 1 },
-                        icon = { Icon(Icons.Default.Speed, contentDescription = "Giám sát") },
-                        label = { Text("Giám sát") },
-                        modifier = Modifier.testTag("tab_hardware")
+                        icon = { Icon(Icons.Default.CleaningServices, contentDescription = "Gỡ rác") },
+                        label = { Text("Gỡ rác") },
+                        modifier = Modifier.testTag("tab_debloat")
                     )
                     NavigationBarItem(
                         selected = selectedTab == 2,
                         onClick = { selectedTab = 2 },
-                        icon = { Icon(Icons.Default.Code, contentDescription = "Playground") },
-                        label = { Text("Code Lab") },
-                        modifier = Modifier.testTag("tab_playground")
+                        icon = { Icon(Icons.Default.SmartToy, contentDescription = "Tự động") },
+                        label = { Text("Tự động") },
+                        modifier = Modifier.testTag("tab_automation")
                     )
                     NavigationBarItem(
                         selected = selectedTab == 3,
                         onClick = { selectedTab = 3 },
-                        icon = { Icon(Icons.Default.Terminal, contentDescription = "Logcat") },
-                        label = { Text("Logcat") },
-                        modifier = Modifier.testTag("tab_logcat")
+                        icon = { Icon(Icons.Default.Terminal, contentDescription = "Terminal") },
+                        label = { Text("Terminal") },
+                        modifier = Modifier.testTag("tab_terminal")
                     )
                     NavigationBarItem(
                         selected = selectedTab == 4,
                         onClick = { selectedTab = 4 },
-                        icon = { Icon(Icons.Default.SmartToy, contentDescription = "Tự động hoá") },
-                        label = { Text("Tự động") },
-                        modifier = Modifier.testTag("tab_automation")
+                        icon = { Icon(Icons.Default.Speed, contentDescription = "Giám sát") },
+                        label = { Text("Giám sát") },
+                        modifier = Modifier.testTag("tab_hardware")
                     )
                 }
             }
@@ -156,10 +156,44 @@ fun MainDashboard(
         ) {
             when (selectedTab) {
                 0 -> DeveloperSettingsScreen(viewModel)
-                1 -> HardwareMonitorScreen(viewModel)
-                2 -> CodePlaygroundScreen(viewModel)
-                3 -> LogcatViewerScreen(viewModel)
-                4 -> DeviceControlAutomationScreen(viewModel)
+                1 -> PackageManagerDebloatScreen(viewModel)
+                2 -> DeviceControlAutomationScreen(viewModel)
+                3 -> TerminalAndLogcatScreen(viewModel)
+                4 -> HardwareMonitorScreen(viewModel)
+            }
+        }
+    }
+}
+
+@Composable
+fun TerminalAndLogcatScreen(viewModel: DevToolboxViewModel) {
+    var subTab by remember { mutableIntStateOf(0) }
+    Column(modifier = Modifier.fillMaxSize()) {
+        TabRow(
+            selectedTabIndex = subTab,
+            containerColor = MaterialTheme.colorScheme.surface,
+            contentColor = MaterialTheme.colorScheme.primary,
+            divider = { HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)) }
+        ) {
+            Tab(
+                selected = subTab == 0,
+                onClick = { subTab = 0 },
+                text = { Text("🔌 Wireless ADB & Shell") },
+                icon = { Icon(Icons.Default.Terminal, contentDescription = null) },
+                modifier = Modifier.testTag("subtab_shell")
+            )
+            Tab(
+                selected = subTab == 1,
+                onClick = { subTab = 1 },
+                text = { Text("📜 Logcat Viewer") },
+                icon = { Icon(Icons.Default.ReceiptLong, contentDescription = null) },
+                modifier = Modifier.testTag("subtab_logcat")
+            )
+        }
+        Box(modifier = Modifier.fillMaxSize()) {
+            when (subTab) {
+                0 -> WirelessAdbTerminalTab(viewModel)
+                1 -> LogcatViewerScreen(viewModel)
             }
         }
     }
@@ -702,9 +736,11 @@ fun ShortcutCard(
     val context = LocalContext.current
     val icon = when (shortcut.iconName) {
         "DeveloperBoard" -> Icons.Default.DeveloperMode
-        "Accessibility" -> Icons.Default.Accessibility
+        "Accessibility" -> Icons.Default.AccessibilityNew
         "Wifi" -> Icons.Default.Wifi
-        "Apps" -> Icons.Default.Apps
+        "Apps" -> Icons.Default.ManageAccounts
+        "Battery" -> Icons.Default.BatterySaver
+        "Mic" -> Icons.Default.Mic
         "Language" -> Icons.Default.Language
         "Settings" -> Icons.Default.Settings
         else -> Icons.Default.Settings

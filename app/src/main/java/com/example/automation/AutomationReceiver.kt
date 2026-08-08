@@ -73,6 +73,42 @@ class AutomationReceiver : BroadcastReceiver() {
                 val port = intent.getIntExtra("port", 5555)
                 ShizukuAdbManager.enableAdbTcp5555(port)
             }
+            "debloat", "uninstall" -> {
+                val pkg = intent.getStringExtra("pkg") ?: ""
+                if (pkg.isNotBlank()) {
+                    val cmd = "pm uninstall -k --user 0 $pkg"
+                    execCmd(cmd) { AdbBridge.executeShell(cmd) }
+                } else {
+                    false to "Thiếu tham số pkg"
+                }
+            }
+            "disable" -> {
+                val pkg = intent.getStringExtra("pkg") ?: ""
+                if (pkg.isNotBlank()) {
+                    val cmd = "pm disable-user --user 0 $pkg"
+                    execCmd(cmd) { AdbBridge.executeShell(cmd) }
+                } else {
+                    false to "Thiếu tham số pkg"
+                }
+            }
+            "enable" -> {
+                val pkg = intent.getStringExtra("pkg") ?: ""
+                if (pkg.isNotBlank()) {
+                    val cmd = "pm enable $pkg"
+                    execCmd(cmd) { AdbBridge.executeShell(cmd) }
+                } else {
+                    false to "Thiếu tham số pkg"
+                }
+            }
+            "clear" -> {
+                val pkg = intent.getStringExtra("pkg") ?: ""
+                if (pkg.isNotBlank()) {
+                    val cmd = "pm clear $pkg"
+                    execCmd(cmd) { AdbBridge.executeShell(cmd) }
+                } else {
+                    false to "Thiếu tham số pkg"
+                }
+            }
             else -> {
                 false to "Hành động không được hỗ trợ: $action"
             }

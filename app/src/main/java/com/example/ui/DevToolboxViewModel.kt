@@ -93,46 +93,75 @@ class DevToolboxViewModel(application: Application) : AndroidViewModel(applicati
     private val _isLogcatPermissionGranted = MutableStateFlow(false)
     val isLogcatPermissionGranted: StateFlow<Boolean> = _isLogcatPermissionGranted.asStateFlow()
 
-    // Shortcut Settings List
+    // Package Manager & Debloat States
+    private val _installedPackages = MutableStateFlow<List<com.example.data.AppPackageInfo>>(emptyList())
+    val installedPackages: StateFlow<List<com.example.data.AppPackageInfo>> = _installedPackages.asStateFlow()
+
+    private val _isLoadingPackages = MutableStateFlow(false)
+    val isLoadingPackages: StateFlow<Boolean> = _isLoadingPackages.asStateFlow()
+
+    private val _packageSearchQuery = MutableStateFlow("")
+    val packageSearchQuery: StateFlow<String> = _packageSearchQuery.asStateFlow()
+
+    private val _packageFilterType = MutableStateFlow(com.example.data.PackageFilterType.ALL)
+    val packageFilterType: StateFlow<com.example.data.PackageFilterType> = _packageFilterType.asStateFlow()
+
+    private val _selectedPackageNames = MutableStateFlow<Set<String>>(emptySet())
+    val selectedPackageNames: StateFlow<Set<String>> = _selectedPackageNames.asStateFlow()
+
+    private val _isBatchDebloatMode = MutableStateFlow(false)
+    val isBatchDebloatMode: StateFlow<Boolean> = _isBatchDebloatMode.asStateFlow()
+
+    private val _packageOperationStatus = MutableStateFlow("")
+    val packageOperationStatus: StateFlow<String> = _packageOperationStatus.asStateFlow()
+
+    // Comprehensive System Shortcuts List (Unified in DeveloperSettingsScreen)
     val systemShortcuts = listOf(
         SystemShortcut(
-            "Cài đặt nhà phát triển",
-            "Mở trực tiếp trang bật tắt gỡ lỗi USB, chế độ nhà phát triển và cấu hình nâng cao.",
-            "DeveloperBoard",
-            Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS,
-            "Lập trình"
-        ),
-        SystemShortcut(
-            "Hỗ trợ tiếp cận (Accessibility)",
-            "Cài đặt các dịch vụ hỗ trợ tiếp cận của thiết bị.",
+            "Dịch vụ Hỗ trợ tiếp cận",
+            "Cấp quyền Accessibility cho tính năng tự động chạm & cử chỉ.",
             "Accessibility",
             Settings.ACTION_ACCESSIBILITY_SETTINGS,
             "Tiện ích"
         ),
         SystemShortcut(
-            "Mạng & Wi-Fi",
-            "Cấu hình kết nối mạng không dây và địa chỉ IP thiết bị.",
-            "Wifi",
-            Settings.ACTION_WIFI_SETTINGS,
-            "Kết nối"
-        ),
-        SystemShortcut(
-            "Quản lý ứng dụng",
-            "Xem danh sách ứng dụng đã cài đặt, xóa cache, bộ nhớ hoặc quản lý quyền.",
+            "Ứng dụng & Quyền",
+            "Xem danh sách ứng dụng, cấp quyền hệ thống và quản lý bộ nhớ.",
             "Apps",
             Settings.ACTION_MANAGE_APPLICATIONS_SETTINGS,
             "Hệ thống"
         ),
         SystemShortcut(
-            "Ngôn ngữ & Nhập liệu",
-            "Bàn phím, ngôn ngữ hệ thống phục vụ test localization ứng dụng.",
+            "Tối ưu Pin & Nguồn",
+            "Cấu hình ứng dụng chạy ngầm không bị hệ thống kill.",
+            "Battery",
+            Settings.ACTION_BATTERY_SAVER_SETTINGS,
+            "Hệ thống"
+        ),
+        SystemShortcut(
+            "Mạng & Wi-Fi Nâng Cao",
+            "Xem thông tin mạng, địa chỉ IP và kết nối ADB không dây.",
+            "Wifi",
+            Settings.ACTION_WIFI_SETTINGS,
+            "Kết nối"
+        ),
+        SystemShortcut(
+            "Trợ lý Giọng nói & AI",
+            "Cấu hình ứng dụng trợ lý giọng nói và tự động hoá.",
+            "Mic",
+            Settings.ACTION_VOICE_INPUT_SETTINGS,
+            "Tiện ích"
+        ),
+        SystemShortcut(
+            "Ngôn ngữ & Bàn phím",
+            "Chuyển đổi ngôn ngữ hệ thống và bàn phím nhập liệu.",
             "Language",
             Settings.ACTION_LOCALE_SETTINGS,
             "Hệ thống"
         ),
         SystemShortcut(
             "Cài đặt hệ thống chung",
-            "Bảng điều khiển cài đặt thiết bị tổng quát.",
+            "Mở bảng điều khiển cài đặt thiết bị tổng quát.",
             "Settings",
             Settings.ACTION_SETTINGS,
             "Hệ thống"
@@ -1071,6 +1100,242 @@ class DevToolboxViewModel(application: Application) : AndroidViewModel(applicati
                 _aiAutomationResult.value = result
                 _isGeneratingAiAutomation.value = false
             }
+        }
+    }
+
+    // Package Manager & Debloat Methods
+    fun setPackageSearchQuery(query: String) {
+        _packageSearchQuery.value = query
+    }
+
+    fun setPackageFilterType(filter: com.example.data.PackageFilterType) {
+        _packageFilterType.value = filter
+    }
+
+    fun toggleSelectPackage(packageName: String) {
+        val current = _selectedPackageNames.value.toMutableSet()
+        if (current.contains(packageName)) {
+            current.remove(packageName)
+        } else {
+            current.add(packageName)
+        }
+        _selectedPackageNames.value = current
+    }
+
+    fun selectAllPackages(packageList: List<com.example.data.AppPackageInfo>) {
+        _selectedPackageNames.value = packageList.map { it.packageName }.toSet()
+    }
+
+    fun clearPackageSelection() {
+        _selectedPackageNames.value = emptySet()
+    }
+
+    fun toggleBatchDebloatMode() {
+        _isBatchDebloatMode.value = !_isBatchDebloatMode.value
+        if (!_isBatchDebloatMode.value) {
+            clearPackageSelection()
+        }
+    }
+
+    fun loadInstalledPackages() {
+        viewModelScope.launch(Dispatchers.IO) {
+            _isLoadingPackages.value = true
+            try {
+                val context = getApplication<Application>()
+                val pm = context.packageManager
+                val packages = pm.getInstalledPackages(android.content.pm.PackageManager.GET_META_DATA)
+                
+                val list = packages.mapNotNull { pkg ->
+                    try {
+                        val appInfo = pkg.applicationInfo ?: return@mapNotNull null
+                        val isSystem = (appInfo.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) != 0 ||
+                                (appInfo.flags and android.content.pm.ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) != 0
+                        val isBloatware = com.example.data.KnownBloatwareList.isBloatware(pkg.packageName)
+                        val bloatDesc = com.example.data.KnownBloatwareList.getDescription(pkg.packageName)
+                        
+                        val appLabel = pm.getApplicationLabel(appInfo).toString()
+                        val icon = try { pm.getApplicationIcon(appInfo) } catch (e: Exception) { null }
+                        val srcDir = appInfo.sourceDir ?: ""
+                        val sizeMb = if (srcDir.isNotEmpty()) {
+                            try {
+                                java.io.File(srcDir).length() / (1024.0 * 1024.0)
+                            } catch (e: Exception) { 0.0 }
+                        } else 0.0
+
+                        com.example.data.AppPackageInfo(
+                            packageName = pkg.packageName,
+                            appName = appLabel.ifBlank { pkg.packageName },
+                            versionName = pkg.versionName ?: "1.0",
+                            versionCode = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) pkg.longVersionCode else pkg.versionCode.toLong(),
+                            isSystemApp = isSystem,
+                            isEnabled = appInfo.enabled,
+                            icon = icon,
+                            isKnownBloatware = isBloatware,
+                            bloatwareDescription = bloatDesc,
+                            installTime = pkg.firstInstallTime,
+                            targetSdkVersion = appInfo.targetSdkVersion,
+                            sourceDir = srcDir,
+                            apkSizeMb = sizeMb
+                        )
+                    } catch (e: Exception) {
+                        null
+                    }
+                }.sortedWith(compareByDescending<com.example.data.AppPackageInfo> { it.isKnownBloatware }
+                    .thenBy { it.appName.lowercase() })
+
+                withContext(Dispatchers.Main) {
+                    _installedPackages.value = list
+                    _isLoadingPackages.value = false
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    _isLoadingPackages.value = false
+                    appendShellLog("❌ Lỗi quét danh sách ứng dụng: ${e.message}")
+                }
+            }
+        }
+    }
+
+    fun uninstallUserPackage(packageName: String) {
+        val context = getApplication<Application>()
+        try {
+            val intent = Intent(Intent.ACTION_DELETE, Uri.parse("package:$packageName")).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(intent)
+            appendShellLog("📲 Đã gửi yêu cầu gỡ cài đặt $packageName")
+        } catch (e: Exception) {
+            appendShellLog("❌ Lỗi yêu cầu gỡ ứng dụng: ${e.message}")
+        }
+    }
+
+    private fun executeSystemPrivilegeCommand(cmd: String): Pair<Boolean, String> {
+        // 1. Thử thực thi với quyền Root SU (Magisk / KernelSU / APatch)
+        try {
+            val process = Runtime.getRuntime().exec(arrayOf("su", "-c", cmd))
+            val output = process.inputStream.bufferedReader().readText().trim()
+            val error = process.errorStream.bufferedReader().readText().trim()
+            val exitCode = process.waitFor()
+            if (exitCode == 0) {
+                return true to (output.ifEmpty { "Thành công [Root SU Engine]" })
+            }
+        } catch (_: Exception) {
+            // Thiết bị không có Root hoặc từ chối cấp quyền Root
+        }
+
+        // 2. Thực thi trực tiếp qua Built-in App Local ADB Shell Process (input/pm/am/dumpsys)
+        val directShellResult = com.example.automation.AdbBridge.executeShell(cmd)
+        if (directShellResult.first) {
+            return true to "${directShellResult.second} [ADB Shell Tích Hợp]"
+        }
+
+        // 3. Dự phòng qua Shizuku ADB IPC Binder nếu có sẵn
+        if (com.example.automation.ShizukuAdbManager.hasShizukuPermission()) {
+            val res = com.example.automation.ShizukuAdbManager.execCommand(cmd)
+            if (res.first) return res
+        }
+
+        return directShellResult
+    }
+
+    fun debloatSystemPackage(packageName: String, useUser0Uninstall: Boolean = true) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val cmd = if (useUser0Uninstall) {
+                "pm uninstall -k --user 0 $packageName"
+            } else {
+                "pm disable-user --user 0 $packageName"
+            }
+            appendShellLog("🧹 Đang thực thi gỡ bỏ rác hệ thống: $cmd ...")
+            
+            val (success, result) = executeSystemPrivilegeCommand(cmd)
+
+            withContext(Dispatchers.Main) {
+                if (success) {
+                    appendShellLog("✅ Gỡ rác hệ thống $packageName thành công: $result")
+                } else {
+                    appendShellLog("❌ Gỡ rác hệ thống $packageName thất bại: $result")
+                }
+            }
+            loadInstalledPackages()
+        }
+    }
+
+    fun disablePackage(packageName: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val cmd = "pm disable-user --user 0 $packageName"
+            appendShellLog("⚡ Vô hiệu hoá $packageName: $cmd ...")
+            val (success, result) = executeSystemPrivilegeCommand(cmd)
+            withContext(Dispatchers.Main) {
+                appendShellLog(if (success) "✅ $packageName đã vô hiệu hoá: $result" else "❌ Lỗi: $result")
+            }
+            loadInstalledPackages()
+        }
+    }
+
+    fun enablePackage(packageName: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val cmd = "pm enable $packageName"
+            appendShellLog("⚡ Kích hoạt lại $packageName: $cmd ...")
+            val (success, result) = executeSystemPrivilegeCommand(cmd)
+            withContext(Dispatchers.Main) {
+                appendShellLog(if (success) "✅ $packageName đã kích hoạt: $result" else "❌ Lỗi: $result")
+            }
+            loadInstalledPackages()
+        }
+    }
+
+    fun restoreSystemPackage(packageName: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val cmd = "pm install-existing $packageName"
+            appendShellLog("🔄 Khôi phục ứng dụng hệ thống đã gỡ: $cmd ...")
+            val (success, result) = executeSystemPrivilegeCommand(cmd)
+            withContext(Dispatchers.Main) {
+                if (success) {
+                    appendShellLog("✅ Đã khôi phục $packageName thành công: $result")
+                } else {
+                    appendShellLog("❌ Khôi phục $packageName thất bại: $result")
+                }
+            }
+            loadInstalledPackages()
+        }
+    }
+
+    fun clearPackageData(packageName: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val cmd = "pm clear $packageName"
+            appendShellLog("🧹 Xoá cache & dữ liệu $packageName: $cmd ...")
+            val (success, result) = executeSystemPrivilegeCommand(cmd)
+            withContext(Dispatchers.Main) {
+                appendShellLog(if (success) "✅ Xoá dữ liệu $packageName thành công!" else "❌ Lỗi: $result")
+            }
+        }
+    }
+
+    fun executeBatchDebloat(useUser0Uninstall: Boolean = true) {
+        val selected = _selectedPackageNames.value.toList()
+        if (selected.isEmpty()) return
+
+        viewModelScope.launch(Dispatchers.IO) {
+            _packageOperationStatus.value = "Đang gỡ hàng loạt ${selected.size} ứng dụng..."
+            appendShellLog("🚀 BẮT ĐẦU GỠ HÀNG LOẠT (${selected.size} gói ứng dụng)...")
+            var countSuccess = 0
+            selected.forEachIndexed { index, pkg ->
+                val cmd = if (useUser0Uninstall) "pm uninstall -k --user 0 $pkg" else "pm disable-user --user 0 $pkg"
+                withContext(Dispatchers.Main) {
+                    _packageOperationStatus.value = "[$index/${selected.size}] Đang xử lý: $pkg"
+                }
+                val (success, res) = executeSystemPrivilegeCommand(cmd)
+                if (success) countSuccess++
+                appendShellLog("  -> $pkg: ${if (success) "✅ Thành công" else "❌ Thất bại ($res)"}")
+            }
+
+            withContext(Dispatchers.Main) {
+                appendShellLog("🎉 Hoàn tất gỡ hàng loạt! Thành công: $countSuccess / ${selected.size}")
+                _packageOperationStatus.value = "Hoàn tất! $countSuccess/${selected.size} gói thành công."
+                clearPackageSelection()
+                _isBatchDebloatMode.value = false
+            }
+            loadInstalledPackages()
         }
     }
 }
