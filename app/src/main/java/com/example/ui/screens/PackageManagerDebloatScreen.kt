@@ -61,6 +61,7 @@ fun PackageManagerDebloatScreen(
     val selectedPackages by viewModel.selectedPackageNames.collectAsStateWithLifecycle()
     val isBatchMode by viewModel.isBatchDebloatMode.collectAsStateWithLifecycle()
     val statusText by viewModel.packageOperationStatus.collectAsStateWithLifecycle()
+    val packageActionFailure by viewModel.packageActionFailure.collectAsStateWithLifecycle()
 
     var selectedAppForDetail by remember { mutableStateOf<AppPackageInfo?>(null) }
     var showBatchConfirmDialog by remember { mutableStateOf(false) }
@@ -409,8 +410,14 @@ fun PackageManagerDebloatScreen(
             onDismissRequest = { singleDebloatTarget = null },
             title = { Text("🧹 Gỡ Ứng Dụng: ${app.appName}") },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Package: ${app.packageName}")
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        text = "Package: ${app.packageName}",
+                        fontSize = 11.sp,
+                        fontFamily = FontFamily.Monospace,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    
                     if (app.isKnownBloatware) {
                         Surface(
                             color = Color(0xFFFFF3E0),
@@ -420,35 +427,160 @@ fun PackageManagerDebloatScreen(
                             Text(
                                 text = "💡 Cảnh báo Bloatware: ${app.bloatwareDescription}",
                                 color = Color(0xFFE65100),
-                                fontSize = 12.sp,
+                                fontSize = 11.sp,
                                 modifier = Modifier.padding(8.dp)
                             )
                         }
                     }
-                    Text(
-                        if (app.isSystemApp)
-                            "Ứng dụng hệ thống sẽ được gỡ bỏ cho người dùng hiện tại (pm uninstall -k --user 0)."
-                        else
-                            "Ứng dụng người dùng sẽ được yêu cầu gỡ cài đặt tiêu chuẩn."
-                    )
+
+                    if (app.isSystemApp) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.Info,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Text(
+                                        text = "⚠️ Thiết bị Chưa Root / Không Root:",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                                
+                                Text(
+                                    text = "Android KHÔNG cho phép tự động gỡ ứng dụng hệ thống mặc định trừ khi máy đã Root hoặc cấp quyền Shizuku. Bạn hãy chọn một trong các cách gỡ dưới đây:",
+                                    fontSize = 11.sp,
+                                    lineHeight = 15.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+
+                                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
+                                // Option 1: Manual Disable
+                                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Text(
+                                        text = "Cách 1: Tắt thủ công qua Cài đặt (Khuyên dùng)",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 11.sp,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Text(
+                                        text = "Mở thông tin ứng dụng, nhấn 'Tắt' (Disable) hoặc 'Gỡ cài đặt cập nhật' để ẩn ứng dụng và khôi phục bộ nhớ.",
+                                        fontSize = 10.sp,
+                                        color = Color.Gray
+                                    )
+                                    Button(
+                                        onClick = {
+                                            singleDebloatTarget = null
+                                            try {
+                                                val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                                    data = Uri.parse("package:${app.packageName}")
+                                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                                }
+                                                context.startActivity(intent)
+                                            } catch (e: Exception) {
+                                                Toast.makeText(context, "Không thể mở cài đặt: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+                                            }
+                                        },
+                                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                                        modifier = Modifier.fillMaxWidth(),
+                                        shape = RoundedCornerShape(8.dp)
+                                    ) {
+                                        Icon(Icons.Default.Settings, contentDescription = null, modifier = Modifier.size(14.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("Mở Cài Đặt Hệ Thống", fontSize = 11.sp)
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(4.dp))
+
+                                // Option 2: Copy ADB Command
+                                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Text(
+                                        text = "Cách 2: Gỡ qua máy tính (PC ADB)",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 11.sp,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    val adbCmd = "adb shell pm uninstall -k --user 0 ${app.packageName}"
+                                    Surface(
+                                        color = MaterialTheme.colorScheme.surface,
+                                        shape = RoundedCornerShape(6.dp),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            Text(
+                                                text = adbCmd,
+                                                fontFamily = FontFamily.Monospace,
+                                                fontSize = 9.sp,
+                                                color = MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier.weight(1f),
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                            IconButton(
+                                                onClick = {
+                                                    clipboardManager.setText(AnnotatedString(adbCmd))
+                                                    Toast.makeText(context, "Đã sao chép lệnh ADB!", Toast.LENGTH_SHORT).show()
+                                                },
+                                                modifier = Modifier.size(24.dp)
+                                            ) {
+                                                Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(12.dp))
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        Text(
+                            text = "Đây là ứng dụng người dùng tự cài đặt thêm. Thao tác này sẽ hiển thị hộp thoại gỡ cài đặt tiêu chuẩn của Android.",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
                 }
             },
             confirmButton = {
-                Button(
-                    onClick = {
-                        val target = singleDebloatTarget
-                        singleDebloatTarget = null
-                        if (target != null) {
-                            if (target.isSystemApp) {
-                                viewModel.debloatSystemPackage(target.packageName)
-                            } else {
-                                viewModel.uninstallUserPackage(target.packageName)
-                            }
-                        }
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                ) {
-                    Text("Xác Nhận Gỡ")
+                if (app.isSystemApp) {
+                    Button(
+                        onClick = {
+                            singleDebloatTarget = null
+                            viewModel.debloatSystemPackage(app.packageName)
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                    ) {
+                        Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(14.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Gỡ Tự Động")
+                    }
+                } else {
+                    Button(
+                        onClick = {
+                            singleDebloatTarget = null
+                            viewModel.uninstallUserPackage(app.packageName)
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                    ) {
+                        Text("Xác Nhận Gỡ")
+                    }
                 }
             },
             dismissButton = {
@@ -603,6 +735,102 @@ fun PackageManagerDebloatScreen(
             },
             dismissButton = {
                 OutlinedButton(onClick = { showRestoreDialog = false }) {
+                    Text("Hủy")
+                }
+            }
+        )
+    }
+
+    // Package Action Failure / Manual Fallback Dialog
+    packageActionFailure?.let { failure ->
+        AlertDialog(
+            onDismissRequest = { viewModel.clearPackageActionFailure() },
+            title = {
+                Text(
+                    text = when (failure.actionType) {
+                        "debloat" -> "⚠️ Không Thể Gỡ Tự Động"
+                        "disable" -> "⚠️ Không Thể Vô Hiệu Hoá"
+                        "enable" -> "⚠️ Không Thể Bật Ứng Dụng"
+                        "clear" -> "⚠️ Không Thể Xoá Dữ Liệu"
+                        else -> "⚠️ Lỗi Thao Tác Hệ Thống"
+                    },
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        text = "Ứng dụng hệ thống: ${failure.appName}\nPackage: ${failure.packageName}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                    
+                    Text(
+                        text = "Android yêu cầu quyền hệ thống cao cấp (Root, ADB hoặc Shizuku) để tự động thao tác trên ứng dụng mặc định này. Tuy nhiên, bạn hoàn toàn có thể thực hiện thủ công chỉ với 2 bước cực đơn giản:",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    
+                    Surface(
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(10.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text(
+                                text = "💡 Hướng dẫn xử lý thủ công:",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = "1. Nhấn nút 'Mở Cài Đặt' ở dưới để vào trang Thông tin ứng dụng của hệ thống.",
+                                fontSize = 11.sp
+                            )
+                            Text(
+                                text = "2. Chọn nút 'Tắt' (Disable) hoặc 'Gỡ cài đặt cập nhật' (Uninstall updates) để ẩn hoàn toàn ứng dụng.",
+                                fontSize = 11.sp
+                            )
+                            Text(
+                                text = "3. Chọn 'Lưu trữ' (Storage) -> 'Xoá dữ liệu' (Clear Data) để thu hồi bộ nhớ.",
+                                fontSize = 11.sp
+                            )
+                        }
+                    }
+                    
+                    Text(
+                        text = "Chi tiết lỗi: ${failure.errorMessage}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.Gray,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.clearPackageActionFailure()
+                        try {
+                            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                data = Uri.parse("package:${failure.packageName}")
+                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            }
+                            context.startActivity(intent)
+                        } catch (e: Exception) {
+                            Toast.makeText(context, "Không thể mở cài đặt ứng dụng: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                ) {
+                    Icon(Icons.Default.Settings, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Mở Cài Đặt")
+                }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { viewModel.clearPackageActionFailure() }) {
                     Text("Hủy")
                 }
             }

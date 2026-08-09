@@ -38,6 +38,13 @@ data class SystemShortcut(
     val category: String = "Hệ thống"
 )
 
+data class PackageActionFailureInfo(
+    val packageName: String,
+    val appName: String,
+    val actionType: String, // "debloat", "disable", "enable", "clear"
+    val errorMessage: String
+)
+
 class DevToolboxViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository = DatabaseProvider.getRepository(application)
@@ -114,6 +121,13 @@ class DevToolboxViewModel(application: Application) : AndroidViewModel(applicati
 
     private val _packageOperationStatus = MutableStateFlow("")
     val packageOperationStatus: StateFlow<String> = _packageOperationStatus.asStateFlow()
+
+    private val _packageActionFailure = MutableStateFlow<PackageActionFailureInfo?>(null)
+    val packageActionFailure: StateFlow<PackageActionFailureInfo?> = _packageActionFailure.asStateFlow()
+
+    fun clearPackageActionFailure() {
+        _packageActionFailure.value = null
+    }
 
     // Comprehensive System Shortcuts List (Unified in DeveloperSettingsScreen)
     val systemShortcuts = listOf(
@@ -1254,6 +1268,13 @@ class DevToolboxViewModel(application: Application) : AndroidViewModel(applicati
                     appendShellLog("✅ Gỡ rác hệ thống $packageName thành công: $result")
                 } else {
                     appendShellLog("❌ Gỡ rác hệ thống $packageName thất bại: $result")
+                    val app = _installedPackages.value.find { it.packageName == packageName }
+                    _packageActionFailure.value = PackageActionFailureInfo(
+                        packageName = packageName,
+                        appName = app?.appName ?: packageName,
+                        actionType = "debloat",
+                        errorMessage = result
+                    )
                 }
             }
             loadInstalledPackages()
@@ -1266,7 +1287,18 @@ class DevToolboxViewModel(application: Application) : AndroidViewModel(applicati
             appendShellLog("⚡ Vô hiệu hoá $packageName: $cmd ...")
             val (success, result) = executeSystemPrivilegeCommand(cmd)
             withContext(Dispatchers.Main) {
-                appendShellLog(if (success) "✅ $packageName đã vô hiệu hoá: $result" else "❌ Lỗi: $result")
+                if (success) {
+                    appendShellLog("✅ $packageName đã vô hiệu hoá: $result")
+                } else {
+                    appendShellLog("❌ Lỗi: $result")
+                    val app = _installedPackages.value.find { it.packageName == packageName }
+                    _packageActionFailure.value = PackageActionFailureInfo(
+                        packageName = packageName,
+                        appName = app?.appName ?: packageName,
+                        actionType = "disable",
+                        errorMessage = result
+                    )
+                }
             }
             loadInstalledPackages()
         }
@@ -1278,7 +1310,18 @@ class DevToolboxViewModel(application: Application) : AndroidViewModel(applicati
             appendShellLog("⚡ Kích hoạt lại $packageName: $cmd ...")
             val (success, result) = executeSystemPrivilegeCommand(cmd)
             withContext(Dispatchers.Main) {
-                appendShellLog(if (success) "✅ $packageName đã kích hoạt: $result" else "❌ Lỗi: $result")
+                if (success) {
+                    appendShellLog("✅ $packageName đã kích hoạt: $result")
+                } else {
+                    appendShellLog("❌ Lỗi: $result")
+                    val app = _installedPackages.value.find { it.packageName == packageName }
+                    _packageActionFailure.value = PackageActionFailureInfo(
+                        packageName = packageName,
+                        appName = app?.appName ?: packageName,
+                        actionType = "enable",
+                        errorMessage = result
+                    )
+                }
             }
             loadInstalledPackages()
         }
@@ -1294,6 +1337,13 @@ class DevToolboxViewModel(application: Application) : AndroidViewModel(applicati
                     appendShellLog("✅ Đã khôi phục $packageName thành công: $result")
                 } else {
                     appendShellLog("❌ Khôi phục $packageName thất bại: $result")
+                    val app = _installedPackages.value.find { it.packageName == packageName }
+                    _packageActionFailure.value = PackageActionFailureInfo(
+                        packageName = packageName,
+                        appName = app?.appName ?: packageName,
+                        actionType = "restore",
+                        errorMessage = result
+                    )
                 }
             }
             loadInstalledPackages()
@@ -1306,7 +1356,18 @@ class DevToolboxViewModel(application: Application) : AndroidViewModel(applicati
             appendShellLog("🧹 Xoá cache & dữ liệu $packageName: $cmd ...")
             val (success, result) = executeSystemPrivilegeCommand(cmd)
             withContext(Dispatchers.Main) {
-                appendShellLog(if (success) "✅ Xoá dữ liệu $packageName thành công!" else "❌ Lỗi: $result")
+                if (success) {
+                    appendShellLog("✅ Xoá dữ liệu $packageName thành công!")
+                } else {
+                    appendShellLog("❌ Lỗi: $result")
+                    val app = _installedPackages.value.find { it.packageName == packageName }
+                    _packageActionFailure.value = PackageActionFailureInfo(
+                        packageName = packageName,
+                        appName = app?.appName ?: packageName,
+                        actionType = "clear",
+                        errorMessage = result
+                    )
+                }
             }
         }
     }
