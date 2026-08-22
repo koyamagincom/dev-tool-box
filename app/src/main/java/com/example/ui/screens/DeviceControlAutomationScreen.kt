@@ -681,6 +681,7 @@ fun WirelessAdbTerminalTab(viewModel: DevToolboxViewModel) {
     val logs by viewModel.shellLogs.collectAsStateWithLifecycle()
     val isExecuting by viewModel.isExecutingShell.collectAsStateWithLifecycle()
 
+    var isGuideExpanded by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
 
     LaunchedEffect(logs.size) {
@@ -695,188 +696,43 @@ fun WirelessAdbTerminalTab(viewModel: DevToolboxViewModel) {
         "input text HelloDevToolbox",
         "am start -a android.settings.SETTINGS",
         "dumpsys battery",
-        "screencap -p /sdcard/screen.png"
+        "getprop ro.build.version.release",
+        "screencap -p /sdcard/screen.png",
+        "pm list packages -3",
+        "id"
+    )
+
+    val quickKeys = listOf(
+        "input keyevent 4" to "BACK",
+        "input keyevent 3" to "HOME",
+        "input keyevent 66" to "ENTER",
+        "dumpsys battery" to "PIN",
+        "getprop" to "PROP",
+        "id" to "UID"
     )
 
     LazyColumn(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier
+            .fillMaxSize()
+            .testTag("wireless_adb_terminal_screen"),
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        // 1. Connection Card
         item {
-            ElevatedCard(
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.elevatedCardColors(
+            Card(
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(
                     containerColor = MaterialTheme.colorScheme.surface
                 ),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(
                     modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Wifi,
-                            contentDescription = null,
-                            tint = if (isConnected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
-                        )
-                        Text(
-                            text = "Kết Nối Wireless ADB & Shell",
-                            fontWeight = FontWeight.Bold,
-                            style = MaterialTheme.typography.titleMedium
-                        )
-                        Spacer(modifier = Modifier.weight(1f))
-                        Badge(
-                            containerColor = if (isConnected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.errorContainer
-                        ) {
-                            Text(
-                                text = if (isConnected) "Đã kết nối ADB" else "Chưa nối ADB",
-                                color = if (isConnected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onErrorContainer,
-                                fontSize = 11.sp,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                            )
-                        }
-                    }
-
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedTextField(
-                            value = ip,
-                            onValueChange = { viewModel.setWirelessAdbIp(it) },
-                            label = { Text("Địa chỉ IP") },
-                            modifier = Modifier.weight(2f).testTag("adb_ip_input"),
-                            shape = RoundedCornerShape(12.dp)
-                        )
-                        OutlinedTextField(
-                            value = port,
-                            onValueChange = { viewModel.setWirelessAdbPort(it) },
-                            label = { Text("Port") },
-                            modifier = Modifier.weight(1f).testTag("adb_port_input"),
-                            shape = RoundedCornerShape(12.dp)
-                        )
-                    }
-
-                    OutlinedTextField(
-                        value = pairingCode,
-                        onValueChange = { viewModel.setWirelessAdbPairingCode(it) },
-                        label = { Text("Mã Ghép Nối (Pairing Code - Tùy chọn)") },
-                        modifier = Modifier.fillMaxWidth().testTag("adb_code_input"),
-                        shape = RoundedCornerShape(12.dp)
-                    )
-
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Button(
-                            onClick = { viewModel.connectWirelessAdb() },
-                            modifier = Modifier.weight(1f).testTag("connect_adb_button"),
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            Icon(Icons.Default.Power, contentDescription = null)
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Kết Nối ADB")
-                        }
-
-                        Button(
-                            onClick = { viewModel.shareAdbToAgy() },
-                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary),
-                            modifier = Modifier.weight(1f).testTag("share_adb_agy_button"),
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            Icon(Icons.Default.Share, contentDescription = null)
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Share ADB to AGY (5555)")
-                        }
-                    }
-                }
-            }
-        }
-
-        item {
-            ElevatedCard(
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.elevatedCardColors(
-                    containerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.3f)
-                ),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.IntegrationInstructions,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.tertiary
-                        )
-                        Text(
-                            text = "🤖 Automation Script Orchestration API (AGY / Termux)",
-                            fontWeight = FontWeight.Bold,
-                            style = MaterialTheme.typography.titleSmall,
-                            color = MaterialTheme.colorScheme.tertiary
-                        )
-                    }
-
-                    Text(
-                        text = "AGY Assistant & Termux có thể gửi lệnh điều phối trực tiếp qua broadcast:",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-
-                    val codeExample = """
-                        # 1. Chạm màn hình
-                        am broadcast -a com.aistudio.devtoolbox.ACTION_AUTO --es action tap --ei x 500 --ei y 1000
-                        
-                        # 2. Gõ văn bản
-                        am broadcast -a com.aistudio.devtoolbox.ACTION_AUTO --es action text --es content "hello"
-                        
-                        # 3. Phím bấm (Code 66 = Enter, 3 = Home, 4 = Back)
-                        am broadcast -a com.aistudio.devtoolbox.ACTION_AUTO --es action key --ei code 66
-                        
-                        # 4. Mở ứng dụng
-                        am broadcast -a com.aistudio.devtoolbox.ACTION_AUTO --es action open --es pkg "com.android.settings"
-                        
-                        # 5. Chụp ảnh màn hình
-                        am broadcast -a com.aistudio.devtoolbox.ACTION_AUTO --es action screenshot --es path "/sdcard/DCIM/AGY/out.png"
-                    """.trimIndent()
-
-                    Surface(
-                        color = MaterialTheme.colorScheme.surfaceVariant,
-                        shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        SelectionContainer {
-                            Text(
-                                text = codeExample,
-                                style = MaterialTheme.typography.bodySmall,
-                                fontFamily = FontFamily.Monospace,
-                                modifier = Modifier.padding(12.dp),
-                                fontSize = 11.sp
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        item {
-            Card(
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E1E)),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(
-                    modifier = Modifier.padding(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
+                    // Header with Status Badge
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -884,90 +740,484 @@ fun WirelessAdbTerminalTab(viewModel: DevToolboxViewModel) {
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Box(modifier = Modifier.size(10.dp).clip(CircleShape).background(Color(0xFFFF5F56)))
-                            Box(modifier = Modifier.size(10.dp).clip(CircleShape).background(Color(0xFFFFBD2E)))
-                            Box(modifier = Modifier.size(10.dp).clip(CircleShape).background(Color(0xFF27C93F)))
-                            Spacer(modifier = Modifier.width(8.dp))
+                            Surface(
+                                shape = CircleShape,
+                                color = if (isConnected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = Icons.Default.Wifi,
+                                        contentDescription = null,
+                                        tint = if (isConnected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                            }
+                            Column {
+                                Text(
+                                    text = "Kết Nối Wireless ADB & Shell",
+                                    fontWeight = FontWeight.Bold,
+                                    style = MaterialTheme.typography.titleMedium
+                                )
+                                Text(
+                                    text = if (isConnected) "Cổng kết nối đang hoạt động" else "Cần bật Gỡ lỗi qua Wi-Fi trong Cài đặt",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+
+                        Surface(
+                            shape = RoundedCornerShape(20.dp),
+                            color = if (isConnected) Color(0xFF1B5E20).copy(alpha = 0.2f) else MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f),
+                            border = BorderStroke(
+                                1.dp,
+                                if (isConnected) Color(0xFF4CAF50) else MaterialTheme.colorScheme.error.copy(alpha = 0.5f)
+                            )
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(8.dp)
+                                        .clip(CircleShape)
+                                        .background(if (isConnected) Color(0xFF4CAF50) else Color(0xFFE53935))
+                                )
+                                Text(
+                                    text = if (isConnected) "Đã Kết Nối" else "Chưa Nối",
+                                    color = if (isConnected) Color(0xFF81C784) else MaterialTheme.colorScheme.error,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
+
+                    // IP and Port input row
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        OutlinedTextField(
+                            value = ip,
+                            onValueChange = { viewModel.setWirelessAdbIp(it) },
+                            label = { Text("Địa chỉ IP") },
+                            placeholder = { Text("127.0.0.1 hoặc 192.168.x.x") },
+                            leadingIcon = { Icon(Icons.Default.Language, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                            modifier = Modifier.weight(2f).testTag("adb_ip_input"),
+                            shape = RoundedCornerShape(12.dp),
+                            singleLine = true
+                        )
+                        OutlinedTextField(
+                            value = port,
+                            onValueChange = { viewModel.setWirelessAdbPort(it) },
+                            label = { Text("Port") },
+                            placeholder = { Text("5555") },
+                            leadingIcon = { Icon(Icons.Default.Pin, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                            modifier = Modifier.weight(1.1f).testTag("adb_port_input"),
+                            shape = RoundedCornerShape(12.dp),
+                            singleLine = true
+                        )
+                    }
+
+                    // Quick Host presets
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Điền nhanh:", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        SuggestionChip(
+                            onClick = {
+                                viewModel.setWirelessAdbIp("127.0.0.1")
+                                viewModel.setWirelessAdbPort("5555")
+                            },
+                            label = { Text("127.0.0.1:5555", fontSize = 11.sp) },
+                            modifier = Modifier.height(28.dp)
+                        )
+                        SuggestionChip(
+                            onClick = {
+                                viewModel.setWirelessAdbIp("localhost")
+                                viewModel.setWirelessAdbPort("5555")
+                            },
+                            label = { Text("localhost:5555", fontSize = 11.sp) },
+                            modifier = Modifier.height(28.dp)
+                        )
+                    }
+
+                    // Pairing code field
+                    OutlinedTextField(
+                        value = pairingCode,
+                        onValueChange = { viewModel.setWirelessAdbPairingCode(it) },
+                        label = { Text("Mã Ghép Nối (Pairing Code - Tùy chọn)") },
+                        placeholder = { Text("Nhập mã 6 chữ số nếu dùng Pairing Code") },
+                        leadingIcon = { Icon(Icons.Default.VpnKey, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                        trailingIcon = {
+                            if (pairingCode.isNotEmpty()) {
+                                IconButton(onClick = { viewModel.setWirelessAdbPairingCode("") }) {
+                                    Icon(Icons.Default.Clear, contentDescription = "Xóa", modifier = Modifier.size(18.dp))
+                                }
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth().testTag("adb_code_input"),
+                        shape = RoundedCornerShape(12.dp),
+                        singleLine = true
+                    )
+
+                    // Symmetrical Action Buttons Row
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Button(
+                            onClick = { viewModel.connectWirelessAdb() },
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(48.dp)
+                                .testTag("connect_adb_button"),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.primary
+                            )
+                        ) {
+                            Icon(Icons.Default.Power, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Kết Nối ADB", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        }
+
+                        FilledTonalButton(
+                            onClick = { viewModel.shareAdbToAgy() },
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(48.dp)
+                                .testTag("share_adb_agy_button"),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.filledTonalButtonColors(
+                                containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                                contentColor = MaterialTheme.colorScheme.onTertiaryContainer
+                            )
+                        ) {
+                            Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Mở Cổng 5555", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        }
+                    }
+                }
+            }
+        }
+
+        // 2. Expandable Automation Script API Guide
+        item {
+            Card(
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                ),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { isGuideExpanded = !isGuideExpanded }
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.IntegrationInstructions,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp)
+                            )
                             Text(
-                                text = "ADB Terminal Console",
+                                text = "Lệnh Tự Động Hoá Broadcast (AGY / Termux)",
+                                fontWeight = FontWeight.SemiBold,
+                                style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        IconButton(
+                            onClick = { isGuideExpanded = !isGuideExpanded },
+                            modifier = Modifier.size(28.dp)
+                        ) {
+                            Icon(
+                                imageVector = if (isGuideExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                contentDescription = if (isGuideExpanded) "Thu gọn" else "Mở rộng",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    if (isGuideExpanded) {
+                        Text(
+                            text = "Termux, Tasker và AGY Assistant có thể gửi lệnh điều phối qua Android Broadcast:",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+
+                        val codeExample = """
+# 1. Chạm màn hình
+am broadcast -a com.aistudio.devtoolbox.ACTION_AUTO --es action tap --ei x 500 --ei y 1000
+
+# 2. Gõ văn bản
+am broadcast -a com.aistudio.devtoolbox.ACTION_AUTO --es action text --es content "hello"
+
+# 3. Phím bấm (Code 66 = Enter, 3 = Home, 4 = Back)
+am broadcast -a com.aistudio.devtoolbox.ACTION_AUTO --es action key --ei code 66
+
+# 4. Mở ứng dụng
+am broadcast -a com.aistudio.devtoolbox.ACTION_AUTO --es action open --es pkg "com.android.settings"
+
+# 5. Chụp ảnh màn hình
+am broadcast -a com.aistudio.devtoolbox.ACTION_AUTO --es action screenshot --es path "/sdcard/DCIM/out.png"
+                        """.trimIndent()
+
+                        Surface(
+                            color = Color(0xFF1E1E1E),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text("Broadcast Command Script", color = Color(0xFF81C784), fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+                                    IconButton(
+                                        onClick = {
+                                            clipboardManager.setText(AnnotatedString(codeExample))
+                                            Toast.makeText(context, "Đã sao chép kịch bản broadcast!", Toast.LENGTH_SHORT).show()
+                                        },
+                                        modifier = Modifier.size(24.dp)
+                                    ) {
+                                        Icon(Icons.Default.ContentCopy, contentDescription = "Copy", tint = Color.LightGray, modifier = Modifier.size(14.dp))
+                                    }
+                                }
+                                HorizontalDivider(color = Color(0xFF333333), modifier = Modifier.padding(vertical = 6.dp))
+                                SelectionContainer {
+                                    Text(
+                                        text = codeExample,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontFamily = FontFamily.Monospace,
+                                        fontSize = 11.sp,
+                                        color = Color(0xFFE0E0E0),
+                                        lineHeight = 16.sp
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 3. ADB Terminal Console Box
+        item {
+            Card(
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF141923)),
+                border = BorderStroke(1.dp, Color(0xFF243048)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    // macOS styled top bar
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            // Traffic lights
+                            Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                                Box(modifier = Modifier.size(10.dp).clip(CircleShape).background(Color(0xFFFF5F56)))
+                                Box(modifier = Modifier.size(10.dp).clip(CircleShape).background(Color(0xFFFFBD2E)))
+                                Box(modifier = Modifier.size(10.dp).clip(CircleShape).background(Color(0xFF27C93F)))
+                            }
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "ADB Shell Console",
                                 color = Color.White,
                                 fontWeight = FontWeight.Bold,
                                 fontFamily = FontFamily.Monospace,
                                 fontSize = 13.sp
                             )
                         }
-                        Row {
+
+                        // Status pill & Action buttons
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = if (isExecuting) Color(0xFFE65100).copy(alpha = 0.3f) else Color(0xFF2E7D32).copy(alpha = 0.25f)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    if (isExecuting) {
+                                        CircularProgressIndicator(modifier = Modifier.size(10.dp), strokeWidth = 1.5.dp, color = Color(0xFFFFB74D))
+                                        Text("Đang chạy", fontSize = 10.sp, color = Color(0xFFFFB74D), fontWeight = FontWeight.Bold)
+                                    } else {
+                                        Box(modifier = Modifier.size(6.dp).clip(CircleShape).background(Color(0xFF81C784)))
+                                        Text("Sẵn sàng", fontSize = 10.sp, color = Color(0xFF81C784), fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
+
                             IconButton(
                                 onClick = {
                                     if (logs.isNotEmpty()) {
                                         val fullLog = logs.joinToString("\n")
                                         clipboardManager.setText(AnnotatedString(fullLog))
-                                        Toast.makeText(context, "📋 Đã sao chép toàn bộ log terminal!", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, "📋 Đã sao chép ${logs.size} dòng log!", Toast.LENGTH_SHORT).show()
                                     } else {
                                         Toast.makeText(context, "Chưa có log nào để sao chép", Toast.LENGTH_SHORT).show()
                                     }
-                                }
+                                },
+                                modifier = Modifier.size(32.dp)
                             ) {
-                                Icon(Icons.Default.ContentCopy, contentDescription = "Copy Log", tint = Color(0xFF00BCD4))
+                                Icon(Icons.Default.ContentCopy, contentDescription = "Copy Log", tint = Color(0xFF80D8FF), modifier = Modifier.size(16.dp))
                             }
-                            IconButton(onClick = { viewModel.clearShellLogs() }) {
-                                Icon(Icons.Default.Delete, contentDescription = "Clear", tint = Color.LightGray)
+
+                            IconButton(
+                                onClick = { viewModel.clearShellLogs() },
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Icon(Icons.Default.DeleteSweep, contentDescription = "Clear", tint = Color(0xFFFF8A80), modifier = Modifier.size(18.dp))
                             }
                         }
                     }
 
-                    HorizontalDivider(color = Color.DarkGray)
+                    HorizontalDivider(color = Color(0xFF243048))
 
+                    // Log output area
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(220.dp)
-                            .background(Color(0xFF121212), shape = RoundedCornerShape(8.dp))
-                            .padding(8.dp)
+                            .height(240.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(Color(0xFF0B0E14))
+                            .border(1.dp, Color(0xFF1E2638), RoundedCornerShape(10.dp))
+                            .padding(10.dp)
                     ) {
-                        SelectionContainer {
-                            LazyColumn(
-                                state = listState,
+                        if (logs.isEmpty()) {
+                            Box(
                                 modifier = Modifier.fillMaxSize(),
-                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                                contentAlignment = Alignment.Center
                             ) {
-                                items(logs) { line ->
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Icon(Icons.Default.Terminal, contentDescription = null, tint = Color(0xFF334155), modifier = Modifier.size(36.dp))
                                     Text(
-                                        text = line,
-                                        color = when {
-                                            line.startsWith("$") -> Color(0xFF4CAF50)
-                                            line.startsWith("➜") -> Color(0xFF00BCD4)
-                                            line.contains("❌") || line.contains("Error") -> Color(0xFFFF5252)
-                                            else -> Color.LightGray
-                                        },
-                                        fontFamily = FontFamily.Monospace,
-                                        fontSize = 12.sp
+                                        text = "Nhập lệnh bên dưới hoặc chọn lệnh mẫu để thực thi",
+                                        color = Color(0xFF64748B),
+                                        fontSize = 11.sp,
+                                        fontFamily = FontFamily.Monospace
                                     )
+                                }
+                            }
+                        } else {
+                            SelectionContainer {
+                                LazyColumn(
+                                    state = listState,
+                                    modifier = Modifier.fillMaxSize(),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    items(logs) { line ->
+                                        Text(
+                                            text = line,
+                                            color = when {
+                                                line.startsWith("$") -> Color(0xFF4ADE80)
+                                                line.startsWith("➜") -> Color(0xFF38BDF8)
+                                                line.contains("❌") || line.contains("Error") || line.contains("denied") -> Color(0xFFF87171)
+                                                line.startsWith("ℹ") -> Color(0xFFFBBF24)
+                                                else -> Color(0xFFCBD5E1)
+                                            },
+                                            fontFamily = FontFamily.Monospace,
+                                            fontSize = 11.5.sp,
+                                            lineHeight = 16.sp
+                                        )
+                                    }
                                 }
                             }
                         }
                     }
 
+                    // Quick keys toolbar
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        items(quickKeys) { (cmd, label) ->
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = Color(0xFF1E293B),
+                                border = BorderStroke(1.dp, Color(0xFF334155)),
+                                modifier = Modifier.clickable {
+                                    viewModel.setCustomShellCommand(cmd)
+                                    viewModel.executeShellCommand()
+                                }
+                            ) {
+                                Text(
+                                    text = label,
+                                    color = Color(0xFF94A3B8),
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    fontFamily = FontFamily.Monospace,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)
+                                )
+                            }
+                        }
+                    }
+
+                    // Preset commands selector
                     Text(
                         text = "Lệnh mẫu chọn nhanh:",
-                        color = Color.Gray,
+                        color = Color(0xFF94A3B8),
                         style = MaterialTheme.typography.labelSmall
                     )
 
                     LazyRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         items(presetCommands) { cmd ->
                             SuggestionChip(
                                 onClick = { viewModel.setCustomShellCommand(cmd) },
-                                label = { Text(cmd, fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = Color.White) },
-                                colors = SuggestionChipDefaults.suggestionChipColors(containerColor = Color(0xFF2D2D2D))
+                                label = { Text(cmd, fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = Color(0xFFE2E8F0)) },
+                                colors = SuggestionChipDefaults.suggestionChipColors(
+                                    containerColor = Color(0xFF1E293B)
+                                ),
+                                border = BorderStroke(1.dp, Color(0xFF334155))
                             )
                         }
                     }
 
+                    // Symmetrical & Perfectly Balanced Command Input & Execute Button Bar
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -976,20 +1226,73 @@ fun WirelessAdbTerminalTab(viewModel: DevToolboxViewModel) {
                         OutlinedTextField(
                             value = customCmd,
                             onValueChange = { viewModel.setCustomShellCommand(it) },
-                            placeholder = { Text("Nhập lệnh shell...", color = Color.Gray) },
-                            modifier = Modifier.weight(1f).testTag("shell_command_input"),
-                            textStyle = LocalTextStyle.current.copy(fontFamily = FontFamily.Monospace, color = Color.White),
+                            placeholder = { Text("Nhập lệnh shell...", color = Color(0xFF64748B), fontSize = 12.sp) },
+                            leadingIcon = {
+                                Text("$", color = Color(0xFF4ADE80), fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, fontSize = 16.sp, modifier = Modifier.padding(start = 12.dp, end = 4.dp))
+                            },
+                            trailingIcon = {
+                                if (customCmd.isNotEmpty()) {
+                                    IconButton(onClick = { viewModel.setCustomShellCommand("") }) {
+                                        Icon(Icons.Default.Clear, contentDescription = "Xóa lệnh", tint = Color.Gray, modifier = Modifier.size(18.dp))
+                                    }
+                                }
+                            },
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(54.dp)
+                                .testTag("shell_command_input"),
+                            textStyle = LocalTextStyle.current.copy(
+                                fontFamily = FontFamily.Monospace,
+                                color = Color.White,
+                                fontSize = 12.5.sp
+                            ),
                             singleLine = true,
+                            shape = RoundedCornerShape(14.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedContainerColor = Color(0xFF0B0E14),
+                                unfocusedContainerColor = Color(0xFF0B0E14),
+                                focusedBorderColor = Color(0xFF38BDF8),
+                                unfocusedBorderColor = Color(0xFF334155),
+                                cursorColor = Color(0xFF4ADE80)
+                            ),
                             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
                             keyboardActions = KeyboardActions(onSend = { viewModel.executeShellCommand() })
                         )
 
-                        IconButton(
+                        Button(
                             onClick = { viewModel.executeShellCommand() },
                             enabled = !isExecuting && customCmd.isNotBlank(),
-                            modifier = Modifier.testTag("send_shell_button")
+                            modifier = Modifier
+                                .height(54.dp)
+                                .testTag("send_shell_button"),
+                            shape = RoundedCornerShape(14.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFF22C55E),
+                                disabledContainerColor = Color(0xFF1E293B)
+                            ),
+                            contentPadding = PaddingValues(horizontal = 14.dp)
                         ) {
-                            Icon(Icons.Default.Send, contentDescription = "Gửi", tint = Color(0xFF4CAF50))
+                            if (isExecuting) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(20.dp),
+                                    strokeWidth = 2.dp,
+                                    color = Color.White
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Default.PlayArrow,
+                                    contentDescription = "Chạy",
+                                    tint = if (customCmd.isNotBlank()) Color.Black else Color.Gray,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "Chạy",
+                                    color = if (customCmd.isNotBlank()) Color.Black else Color.Gray,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp
+                                )
+                            }
                         }
                     }
                 }
@@ -1340,30 +1643,32 @@ fun AdbBridgeDaemonTab(viewModel: DevToolboxViewModel) {
                         Button(
                             onClick = { viewModel.captureDaemonScreenshot() },
                             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                            shape = RoundedCornerShape(6.dp)
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.height(36.dp)
                         ) {
-                            Icon(Icons.Default.CameraAlt, contentDescription = null, modifier = Modifier.size(14.dp))
+                            Icon(Icons.Default.CameraAlt, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("Chụp màn hình", fontSize = 11.sp)
+                            Text("Chụp màn hình", fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
                         }
                     }
 
                     // Preset chips
-                    Text("Lệnh mẫu thao tác nhanh:", color = Color.Gray, fontSize = 11.sp)
+                    Text("Lệnh mẫu thao tác nhanh:", color = Color(0xFF9E9E9E), fontSize = 11.sp)
                     LazyRow(
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         items(presetDaemonCommands) { cmd ->
                             SuggestionChip(
                                 onClick = { viewModel.setDaemonExecCommand(cmd) },
-                                label = { Text(cmd, fontFamily = FontFamily.Monospace, fontSize = 10.sp, color = Color.White) },
-                                colors = SuggestionChipDefaults.suggestionChipColors(containerColor = Color(0xFF2E2E2E))
+                                label = { Text(cmd, fontFamily = FontFamily.Monospace, fontSize = 10.5.sp, color = Color.White) },
+                                colors = SuggestionChipDefaults.suggestionChipColors(containerColor = Color(0xFF2E2E2E)),
+                                border = BorderStroke(1.dp, Color(0xFF424242))
                             )
                         }
                     }
 
-                    // Command input row
+                    // Command input row - balanced with 54dp height
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -1373,22 +1678,53 @@ fun AdbBridgeDaemonTab(viewModel: DevToolboxViewModel) {
                             value = execCmd,
                             onValueChange = { viewModel.setDaemonExecCommand(it) },
                             placeholder = { Text("adbx input tap 500 1000", color = Color.Gray, fontSize = 12.sp) },
-                            modifier = Modifier.weight(1f).testTag("daemon_cmd_input"),
+                            leadingIcon = {
+                                Text("⚡", fontSize = 14.sp, modifier = Modifier.padding(start = 12.dp, end = 4.dp))
+                            },
+                            trailingIcon = {
+                                if (execCmd.isNotEmpty()) {
+                                    IconButton(onClick = { viewModel.setDaemonExecCommand("") }) {
+                                        Icon(Icons.Default.Clear, contentDescription = "Xóa", tint = Color.Gray, modifier = Modifier.size(18.dp))
+                                    }
+                                }
+                            },
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(54.dp)
+                                .testTag("daemon_cmd_input"),
                             textStyle = LocalTextStyle.current.copy(fontFamily = FontFamily.Monospace, color = Color.White, fontSize = 12.sp),
                             singleLine = true,
+                            shape = RoundedCornerShape(14.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedContainerColor = Color(0xFF0F0F0F),
+                                unfocusedContainerColor = Color(0xFF0F0F0F),
+                                focusedBorderColor = Color(0xFF4CAF50),
+                                unfocusedBorderColor = Color(0xFF333333),
+                                cursorColor = Color(0xFF4CAF50)
+                            ),
                             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
                             keyboardActions = KeyboardActions(onSend = { viewModel.executeDaemonCommand() })
                         )
 
-                        IconButton(
+                        Button(
                             onClick = { viewModel.executeDaemonCommand() },
                             enabled = !isExecutingCmd && execCmd.isNotBlank(),
-                            modifier = Modifier.testTag("send_daemon_cmd_btn")
+                            modifier = Modifier
+                                .height(54.dp)
+                                .testTag("send_daemon_cmd_btn"),
+                            shape = RoundedCornerShape(14.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFF2E7D32),
+                                disabledContainerColor = Color(0xFF263238)
+                            ),
+                            contentPadding = PaddingValues(horizontal = 14.dp)
                         ) {
                             if (isExecutingCmd) {
-                                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = Color(0xFF4CAF50))
+                                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = Color.White)
                             } else {
-                                Icon(Icons.Default.Send, contentDescription = "Gửi", tint = Color(0xFF4CAF50))
+                                Icon(Icons.Default.PlayArrow, contentDescription = "Chạy", tint = if (execCmd.isNotBlank()) Color.White else Color.Gray, modifier = Modifier.size(20.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Chạy", color = if (execCmd.isNotBlank()) Color.White else Color.Gray, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                             }
                         }
                     }
