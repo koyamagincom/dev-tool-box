@@ -34,9 +34,15 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.ui.graphics.asImageBitmap
+import com.example.automation.AdbBridgeDaemonManager
 import com.example.ui.DevToolboxViewModel
 import com.example.ui.MacroAction
 import com.example.ui.MacroType
@@ -48,7 +54,7 @@ fun DeviceControlAutomationScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    var selectedSubMode by remember { mutableIntStateOf(0) } // 0: AI Agent, 1: Touch Macro
+    var selectedSubMode by remember { mutableIntStateOf(0) } // 0: AI Agent, 1: Touch Macro, 2: Daemon Server
 
     Column(
         modifier = modifier
@@ -65,16 +71,26 @@ fun DeviceControlAutomationScreen(
             Tab(
                 selected = selectedSubMode == 0,
                 onClick = { selectedSubMode = 0 },
-                text = { Text("🤖 AI Assistant") },
-                icon = { Icon(Icons.Default.AutoAwesome, contentDescription = "AI Agent") },
+                text = { Text("🤖 AI Agent", fontSize = 13.sp) },
+                icon = { Icon(Icons.Default.AutoAwesome, contentDescription = "AI Agent", modifier = Modifier.size(18.dp)) },
                 modifier = Modifier.testTag("subtab_ai_agent")
             )
             Tab(
                 selected = selectedSubMode == 1,
                 onClick = { selectedSubMode = 1 },
-                text = { Text("⚡ Touch Macro") },
-                icon = { Icon(Icons.Default.TouchApp, contentDescription = "Macro") },
+                text = { Text("⚡ Macro", fontSize = 13.sp) },
+                icon = { Icon(Icons.Default.TouchApp, contentDescription = "Macro", modifier = Modifier.size(18.dp)) },
                 modifier = Modifier.testTag("subtab_macro")
+            )
+            Tab(
+                selected = selectedSubMode == 2,
+                onClick = { 
+                    selectedSubMode = 2 
+                    viewModel.checkDaemonStatus()
+                },
+                text = { Text("🌐 Daemon Server", fontSize = 13.sp) },
+                icon = { Icon(Icons.Default.Dns, contentDescription = "Daemon", modifier = Modifier.size(18.dp)) },
+                modifier = Modifier.testTag("subtab_daemon")
             )
         }
 
@@ -82,6 +98,7 @@ fun DeviceControlAutomationScreen(
             when (selectedSubMode) {
                 0 -> AiAutomationTab(viewModel)
                 1 -> MacroAutoClickerTab(viewModel)
+                2 -> AdbBridgeDaemonTab(viewModel)
             }
         }
     }
@@ -978,5 +995,790 @@ fun WirelessAdbTerminalTab(viewModel: DevToolboxViewModel) {
                 }
             }
         }
+    }
+}
+
+@Composable
+fun AdbBridgeDaemonTab(viewModel: DevToolboxViewModel) {
+    val context = LocalContext.current
+    val clipboardManager = LocalClipboardManager.current
+
+    val daemonStatus by viewModel.daemonStatus.collectAsStateWithLifecycle()
+    val daemonToken by viewModel.daemonToken.collectAsStateWithLifecycle()
+    val isRefreshing by viewModel.isDaemonRefreshing.collectAsStateWithLifecycle()
+    val report by viewModel.daemonVerificationReport.collectAsStateWithLifecycle()
+    val isVerifying by viewModel.isVerifyingDaemon.collectAsStateWithLifecycle()
+    val screenshotBitmap by viewModel.daemonScreenshot.collectAsStateWithLifecycle()
+    val execCmd by viewModel.daemonExecCommand.collectAsStateWithLifecycle()
+    val execOutput by viewModel.daemonExecOutput.collectAsStateWithLifecycle()
+    val isExecutingCmd by viewModel.isExecutingDaemonCmd.collectAsStateWithLifecycle()
+
+    var selectedSourceCodeTab by remember { mutableIntStateOf(0) } // 0: DaemonServer.java, 1: build_daemon.sh, 2: start_daemon.sh, 3: adbx, 4: verify_daemon.py
+    var showExpectedLogDialog by remember { mutableStateOf(false) }
+
+    val presetDaemonCommands = listOf(
+        "input tap 500 1000",
+        "screencap -p /sdcard/screen.png",
+        "getprop ro.build.version.release",
+        "id",
+        "pm list packages -3",
+        "input text 'Hello%sWorld'",
+        "am start -a android.intent.action.VIEW -d 'https://google.com'"
+    )
+
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .testTag("daemon_server_tab"),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        // 1. Overview & Architectural Value Card
+        item {
+            ElevatedCard(
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.elevatedCardColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
+                ),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(40.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    Icons.Default.Dns,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onPrimary,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+                        }
+                        Column {
+                            Text(
+                                text = "AdbBridgeDaemon (Zero-Loss Server)",
+                                fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Text(
+                                text = "Tiến trình ngầm app_process (UID 2000) • REST API 127.0.0.1:8765",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    Text(
+                        text = "💡 Điểm đột phá: Sau khi kích hoạt 1 lần bằng lệnh ADB, bạn có thể TẮT HOÀN TOÀN Chế độ nhà phát triển và ngắt Wi-Fi. Termux / PRoot / Linux vẫn điều khiển mọi thao tác cảm ứng, chụp màn hình và gỡ app siêu tốc (<5ms).",
+                        fontSize = 12.sp,
+                        lineHeight = 17.sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+            }
+        }
+
+        // 2. Real-time Status Card
+        item {
+            Card(
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = if (daemonStatus.isOnline) Color(0xFF1E3A2B) else Color(0xFF2C2222)
+                ),
+                border = BorderStroke(
+                    1.dp,
+                    if (daemonStatus.isOnline) Color(0xFF4CAF50).copy(alpha = 0.5f) else Color(0xFFE57373).copy(alpha = 0.3f)
+                ),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Surface(
+                                shape = CircleShape,
+                                color = if (daemonStatus.isOnline) Color(0xFF4CAF50) else Color(0xFFE53935),
+                                modifier = Modifier.size(12.dp)
+                            ) {}
+                            Text(
+                                text = if (daemonStatus.isOnline) "ONLINE (Đang Hoạt Động)" else "OFFLINE (Chưa Chạy)",
+                                fontWeight = FontWeight.Bold,
+                                color = if (daemonStatus.isOnline) Color(0xFF81C784) else Color(0xFFEF9A9A),
+                                style = MaterialTheme.typography.titleSmall
+                            )
+                        }
+
+                        IconButton(
+                            onClick = { viewModel.checkDaemonStatus() },
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            if (isRefreshing) {
+                                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = Color.White)
+                            } else {
+                                Icon(Icons.Default.Refresh, contentDescription = "Làm mới", tint = Color.White, modifier = Modifier.size(18.dp))
+                            }
+                        }
+                    }
+
+                    HorizontalDivider(color = Color.White.copy(alpha = 0.15f))
+
+                    // Metrics Grid
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column {
+                            Text("UID TIẾN TRÌNH", color = Color.Gray, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            Text(
+                                text = if (daemonStatus.isOnline) "${daemonStatus.uid} (${daemonStatus.user})" else "--",
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp,
+                                fontFamily = FontFamily.Monospace
+                            )
+                        }
+                        Column {
+                            Text("THỜI GIAN CHẠY", color = Color.Gray, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            Text(
+                                text = if (daemonStatus.isOnline) "${daemonStatus.uptimeSeconds}s (${daemonStatus.uptimeSeconds / 60}m)" else "--",
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp
+                            )
+                        }
+                        Column {
+                            Text("RAM TRỐNG", color = Color.Gray, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            Text(
+                                text = if (daemonStatus.isOnline) "${daemonStatus.freeMemoryMb} MB / ${daemonStatus.totalMemoryMb} MB" else "--",
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp
+                            )
+                        }
+                    }
+
+                    // Token Field
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("MÃ XÁC THỰC BẢO MẬT (AUTH TOKEN):", color = Color.Gray, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Surface(
+                                color = Color.Black.copy(alpha = 0.4f),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text(
+                                    text = daemonToken.ifBlank { "Chưa có token (Server offline hoặc chưa cấp)" },
+                                    fontFamily = FontFamily.Monospace,
+                                    fontSize = 11.sp,
+                                    color = if (daemonToken.isNotBlank()) Color(0xFF64B5F6) else Color.Gray,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)
+                                )
+                            }
+                            if (daemonToken.isNotBlank()) {
+                                IconButton(
+                                    onClick = {
+                                        clipboardManager.setText(AnnotatedString(daemonToken))
+                                        Toast.makeText(context, "Đã sao chép Bearer Token!", Toast.LENGTH_SHORT).show()
+                                    },
+                                    modifier = Modifier.size(36.dp)
+                                ) {
+                                    Icon(Icons.Default.ContentCopy, contentDescription = "Copy Token", tint = Color.White, modifier = Modifier.size(16.dp))
+                                }
+                            }
+                        }
+                    }
+
+                    // Management Action Buttons
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Button(
+                            onClick = { viewModel.startDaemonProcess() },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Khởi Động", fontSize = 12.sp)
+                        }
+
+                        Button(
+                            onClick = { viewModel.stopDaemonProcess() },
+                            enabled = daemonStatus.isOnline,
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC62828)),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.Stop, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Dừng Server", fontSize = 12.sp)
+                        }
+                    }
+                }
+            }
+        }
+
+        // 3. One-Touch ADB Launch & Quick Setup Guide
+        item {
+            Card(
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(Icons.Default.Terminal, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        Text(
+                            text = "Lệnh Kích Hoạt 1-Chạm Qua ADB PC / Termux",
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.titleSmall
+                        )
+                    }
+
+                    val adbLaunchCmd = AdbBridgeDaemonManager.getLaunchAdbCommand()
+                    Surface(
+                        color = Color(0xFF1E1E1E),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = adbLaunchCmd,
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 11.sp,
+                                color = Color(0xFF81C784),
+                                modifier = Modifier.weight(1f)
+                            )
+                            IconButton(
+                                onClick = {
+                                    clipboardManager.setText(AnnotatedString(adbLaunchCmd))
+                                    Toast.makeText(context, "Đã sao chép lệnh ADB!", Toast.LENGTH_SHORT).show()
+                                },
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Icon(Icons.Default.ContentCopy, contentDescription = "Copy", tint = Color.White, modifier = Modifier.size(16.dp))
+                            }
+                        }
+                    }
+
+                    Text(
+                        text = "👉 Sau khi chạy lệnh trên 1 lần duy nhất, Daemon sẽ chạy nền độc lập với UID 2000. Bạn có thể rút cáp và tắt Chế độ nhà phát triển.",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+
+        // 4. Interactive Live REST Console & Screenshot Trigger
+        item {
+            Card(
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A1A)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(Icons.Default.Send, contentDescription = null, tint = Color(0xFF4CAF50), modifier = Modifier.size(20.dp))
+                            Text(
+                                text = "Bàn Điều Khiển & Thực Thi Trực Tiếp (adbx)",
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White,
+                                style = MaterialTheme.typography.titleSmall
+                            )
+                        }
+
+                        Button(
+                            onClick = { viewModel.captureDaemonScreenshot() },
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                            shape = RoundedCornerShape(6.dp)
+                        ) {
+                            Icon(Icons.Default.CameraAlt, contentDescription = null, modifier = Modifier.size(14.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Chụp màn hình", fontSize = 11.sp)
+                        }
+                    }
+
+                    // Preset chips
+                    Text("Lệnh mẫu thao tác nhanh:", color = Color.Gray, fontSize = 11.sp)
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        items(presetDaemonCommands) { cmd ->
+                            SuggestionChip(
+                                onClick = { viewModel.setDaemonExecCommand(cmd) },
+                                label = { Text(cmd, fontFamily = FontFamily.Monospace, fontSize = 10.sp, color = Color.White) },
+                                colors = SuggestionChipDefaults.suggestionChipColors(containerColor = Color(0xFF2E2E2E))
+                            )
+                        }
+                    }
+
+                    // Command input row
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        OutlinedTextField(
+                            value = execCmd,
+                            onValueChange = { viewModel.setDaemonExecCommand(it) },
+                            placeholder = { Text("adbx input tap 500 1000", color = Color.Gray, fontSize = 12.sp) },
+                            modifier = Modifier.weight(1f).testTag("daemon_cmd_input"),
+                            textStyle = LocalTextStyle.current.copy(fontFamily = FontFamily.Monospace, color = Color.White, fontSize = 12.sp),
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                            keyboardActions = KeyboardActions(onSend = { viewModel.executeDaemonCommand() })
+                        )
+
+                        IconButton(
+                            onClick = { viewModel.executeDaemonCommand() },
+                            enabled = !isExecutingCmd && execCmd.isNotBlank(),
+                            modifier = Modifier.testTag("send_daemon_cmd_btn")
+                        ) {
+                            if (isExecutingCmd) {
+                                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = Color(0xFF4CAF50))
+                            } else {
+                                Icon(Icons.Default.Send, contentDescription = "Gửi", tint = Color(0xFF4CAF50))
+                            }
+                        }
+                    }
+
+                    // Output Box
+                    if (execOutput.isNotBlank()) {
+                        Surface(
+                            color = Color(0xFF0F0F0F),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            SelectionContainer {
+                                Text(
+                                    text = execOutput,
+                                    color = Color(0xFF80D8FF),
+                                    fontFamily = FontFamily.Monospace,
+                                    fontSize = 11.sp,
+                                    lineHeight = 16.sp,
+                                    modifier = Modifier.padding(10.dp)
+                                )
+                            }
+                        }
+                    }
+
+                    // Screenshot Preview Box (if captured)
+                    if (screenshotBitmap != null) {
+                        Card(
+                            shape = RoundedCornerShape(10.dp),
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFF222222)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(10.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text("📸 Ảnh Màn Hình Vừa Chụp (/screenshot):", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                                    IconButton(
+                                        onClick = { viewModel.clearDaemonScreenshot() },
+                                        modifier = Modifier.size(24.dp)
+                                    ) {
+                                        Icon(Icons.Default.Close, contentDescription = "Đóng", tint = Color.Gray, modifier = Modifier.size(16.dp))
+                                    }
+                                }
+                                Image(
+                                    bitmap = screenshotBitmap!!.asImageBitmap(),
+                                    contentDescription = "Daemon Screenshot Preview",
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .heightIn(max = 240.dp)
+                                        .clip(RoundedCornerShape(8.dp))
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 5. Automated Verification Suite & Benchmark
+        item {
+            Card(
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(Icons.Default.FactCheck, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                            Column {
+                                Text(
+                                    text = "Bộ Kiểm Thử & Đo Benchmark Tự Động",
+                                    fontWeight = FontWeight.Bold,
+                                    style = MaterialTheme.typography.titleSmall
+                                )
+                                Text(
+                                    text = "6 bài kiểm chứng: UID, Shell, getprop, Screenshot, Security, Latency",
+                                    fontSize = 10.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Button(
+                            onClick = { viewModel.runDaemonVerification() },
+                            enabled = !isVerifying,
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.weight(1f).testTag("run_verification_btn")
+                        ) {
+                            if (isVerifying) {
+                                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = Color.White)
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Đang kiểm thử...", fontSize = 12.sp)
+                            } else {
+                                Icon(Icons.Default.PlayCircle, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Chạy 6 Bài Test", fontSize = 12.sp)
+                            }
+                        }
+
+                        OutlinedButton(
+                            onClick = { showExpectedLogDialog = true },
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Icon(Icons.Default.Visibility, contentDescription = null, modifier = Modifier.size(14.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Xem Log Mẫu", fontSize = 11.sp)
+                        }
+                    }
+
+                    // Verification Results Render
+                    if (report != null) {
+                        Surface(
+                            color = if (report!!.passedTests == report!!.totalTests) Color(0xFF1B5E20).copy(alpha = 0.15f) else Color(0xFFB71C1C).copy(alpha = 0.15f),
+                            shape = RoundedCornerShape(10.dp),
+                            border = BorderStroke(1.dp, if (report!!.passedTests == report!!.totalTests) Color(0xFF4CAF50) else Color(0xFFE53935)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text(
+                                        text = "TỔNG KẾT: ${report!!.passedTests}/${report!!.totalTests} BÀI ĐẠT (${if (report!!.passedTests == report!!.totalTests) "HOÀN HẢO" else "CÓ LỖI"})",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 12.sp,
+                                        color = if (report!!.passedTests == report!!.totalTests) Color(0xFF2E7D32) else Color(0xFFC62828)
+                                    )
+                                    Text(
+                                        text = "Độ trễ TB: ${String.format("%.2f", report!!.averageLatencyMs)}ms",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 11.sp,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+
+                                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+
+                                report!!.testItems.forEach { test ->
+                                    Row(
+                                        verticalAlignment = Alignment.Top,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Icon(
+                                            imageVector = if (test.isPassed) Icons.Default.CheckCircle else Icons.Default.Cancel,
+                                            contentDescription = null,
+                                            tint = if (test.isPassed) Color(0xFF4CAF50) else Color(0xFFE53935),
+                                            modifier = Modifier.size(16.dp).padding(top = 2.dp)
+                                        )
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Row(
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                modifier = Modifier.fillMaxWidth()
+                                            ) {
+                                                Text(
+                                                    text = "Test ${test.testNumber}: ${test.name}",
+                                                    fontWeight = FontWeight.Bold,
+                                                    fontSize = 11.sp
+                                                )
+                                                Text(
+                                                    text = "${test.latencyMs}ms",
+                                                    fontSize = 10.sp,
+                                                    fontFamily = FontFamily.Monospace,
+                                                    color = Color.Gray
+                                                )
+                                            }
+                                            Text(
+                                                text = test.details,
+                                                fontSize = 10.sp,
+                                                fontFamily = FontFamily.Monospace,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 6. Source Code Exporter & Inspector
+        item {
+            Card(
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        text = "📦 Toàn Bộ Mã Nguồn 5 Thành Phần Hệ Thống",
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleSmall
+                    )
+
+                    val sourceTabs = listOf("DaemonServer.java", "build_daemon.sh", "start_daemon.sh", "adbx", "verify_daemon.py")
+                    ScrollableTabRow(
+                        selectedTabIndex = selectedSourceCodeTab,
+                        edgePadding = 0.dp,
+                        containerColor = Color.Transparent,
+                        divider = {}
+                    ) {
+                        sourceTabs.forEachIndexed { idx, title ->
+                            Tab(
+                                selected = selectedSourceCodeTab == idx,
+                                onClick = { selectedSourceCodeTab = idx },
+                                text = { Text(title, fontSize = 11.sp, fontFamily = FontFamily.Monospace) }
+                            )
+                        }
+                    }
+
+                    val currentCode = when (selectedSourceCodeTab) {
+                        0 -> AdbBridgeDaemonManager.DAEMON_SERVER_JAVA_CODE
+                        1 -> AdbBridgeDaemonManager.BUILD_DAEMON_SH_CODE
+                        2 -> AdbBridgeDaemonManager.START_DAEMON_SH_CODE
+                        3 -> AdbBridgeDaemonManager.ADBX_CLI_CODE
+                        else -> AdbBridgeDaemonManager.VERIFY_DAEMON_PY_CODE
+                    }
+
+                    Surface(
+                        color = Color(0xFF1E1E1E),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(10.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = sourceTabs[selectedSourceCodeTab],
+                                    color = Color(0xFF81C784),
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    fontFamily = FontFamily.Monospace
+                                )
+                                Button(
+                                    onClick = {
+                                        clipboardManager.setText(AnnotatedString(currentCode))
+                                        Toast.makeText(context, "Đã sao chép ${sourceTabs[selectedSourceCodeTab]}!", Toast.LENGTH_SHORT).show()
+                                    },
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                    shape = RoundedCornerShape(6.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                                ) {
+                                    Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(12.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Sao chép file", fontSize = 10.sp)
+                                }
+                            }
+
+                            HorizontalDivider(color = Color.White.copy(alpha = 0.1f), modifier = Modifier.padding(vertical = 6.dp))
+
+                            SelectionContainer {
+                                Text(
+                                    text = currentCode,
+                                    color = Color(0xFFECEFF1),
+                                    fontFamily = FontFamily.Monospace,
+                                    fontSize = 10.sp,
+                                    lineHeight = 14.sp,
+                                    modifier = Modifier
+                                        .heightIn(max = 220.dp)
+                                        .horizontalScroll(rememberScrollState())
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Expected Output Dialog
+    if (showExpectedLogDialog) {
+        val expectedLog = """============================================================
+      ADB BRIDGE DAEMON AUTOMATED VERIFICATION SUITE
+============================================================
+
+[TEST 1] Kiểm Tra Trạng Thái & Đặc Quyền UID
+------------------------------------------------------------
+Status: online | UID: 2000 | Uptime: 14s
+>>> KẾT QUẢ: PASS (Đặc quyền Shell UID 2000 xác nhận chính xác)
+
+[TEST 2] Thực Thi Lệnh Cơ Bản (id)
+------------------------------------------------------------
+Output: uid=2000(shell) gid=2000(shell) groups=2000(shell),1004(input),1007(log),1011(adb)
+>>> KẾT QUẢ: PASS (Lệnh shell thực thi thành công)
+
+[TEST 3] Đọc Thuộc Tính Hệ Thống Android (getprop)
+------------------------------------------------------------
+Android Version: 14
+>>> KẾT QUẢ: PASS (Android 14)
+
+[TEST 4] Chụp Ảnh Màn Hình & Stream Binary (screencap)
+------------------------------------------------------------
+Received: 2184.45 KB | Is Valid PNG Header: True
+>>> KẾT QUẢ: PASS (Stream ảnh PNG hoàn chỉnh)
+
+[TEST 5] Kiểm Tra Bảo Mật Token (Unauthorized Test)
+------------------------------------------------------------
+HTTP Status Code: 401 Unauthorized (Chặn request trái phép thành công)
+>>> KẾT QUẢ: PASS
+
+[TEST 6] Đo Độ Trễ (Latency Benchmark - 10 Iterations)
+------------------------------------------------------------
+Min: 3.42ms | Max: 6.85ms | Avg: 4.61ms
+>>> KẾT QUẢ: PASS (Độ trễ trung bình siêu tốc: 4.61ms < 15ms)
+
+============================================================
+TỔNG KẾT KIỂM THỬ: 6/6 BÀI KIỂM TRA ĐẠT HOÀN HẢO
+============================================================"""
+
+        AlertDialog(
+            onDismissRequest = { showExpectedLogDialog = false },
+            title = { Text("📋 Bảng Output Mẫu Đối Chiếu") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "Kết quả mẫu khi chạy file verify_daemon.py thành công 100%:",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Surface(
+                        color = Color(0xFF1E1E1E),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        SelectionContainer {
+                            Text(
+                                text = expectedLog,
+                                color = Color(0xFF81C784),
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 9.sp,
+                                lineHeight = 13.sp,
+                                modifier = Modifier
+                                    .padding(8.dp)
+                                    .heightIn(max = 300.dp)
+                                    .horizontalScroll(rememberScrollState())
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        clipboardManager.setText(AnnotatedString(expectedLog))
+                        Toast.makeText(context, "Đã sao chép log mẫu!", Toast.LENGTH_SHORT).show()
+                    }
+                ) {
+                    Text("Sao Chép Log Mẫu")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showExpectedLogDialog = false }) {
+                    Text("Đóng")
+                }
+            }
+        )
     }
 }

@@ -7,10 +7,12 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.os.BatteryManager
 import android.app.ActivityManager
+import android.graphics.Bitmap
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.api.GeminiClient
+import com.example.automation.AdbBridgeDaemonManager
 import com.example.data.CodeSnippet
 import com.example.data.DatabaseProvider
 import kotlinx.coroutines.Dispatchers
@@ -1370,6 +1372,144 @@ class DevToolboxViewModel(application: Application) : AndroidViewModel(applicati
                 }
             }
         }
+    }
+
+    // AdbBridgeDaemon States
+    private val _daemonStatus = MutableStateFlow(AdbBridgeDaemonManager.DaemonStatus(isOnline = false))
+    val daemonStatus: StateFlow<AdbBridgeDaemonManager.DaemonStatus> = _daemonStatus.asStateFlow()
+
+    private val _daemonToken = MutableStateFlow("")
+    val daemonToken: StateFlow<String> = _daemonToken.asStateFlow()
+
+    private val _isDaemonRefreshing = MutableStateFlow(false)
+    val isDaemonRefreshing: StateFlow<Boolean> = _isDaemonRefreshing.asStateFlow()
+
+    private val _daemonVerificationReport = MutableStateFlow<AdbBridgeDaemonManager.VerificationReport?>(null)
+    val daemonVerificationReport: StateFlow<AdbBridgeDaemonManager.VerificationReport?> = _daemonVerificationReport.asStateFlow()
+
+    private val _isVerifyingDaemon = MutableStateFlow(false)
+    val isVerifyingDaemon: StateFlow<Boolean> = _isVerifyingDaemon.asStateFlow()
+
+    private val _daemonScreenshot = MutableStateFlow<Bitmap?>(null)
+    val daemonScreenshot: StateFlow<Bitmap?> = _daemonScreenshot.asStateFlow()
+
+    private val _daemonExecCommand = MutableStateFlow("input tap 500 1000")
+    val daemonExecCommand: StateFlow<String> = _daemonExecCommand.asStateFlow()
+
+    private val _daemonExecOutput = MutableStateFlow("")
+    val daemonExecOutput: StateFlow<String> = _daemonExecOutput.asStateFlow()
+
+    private val _isExecutingDaemonCmd = MutableStateFlow(false)
+    val isExecutingDaemonCmd: StateFlow<Boolean> = _isExecutingDaemonCmd.asStateFlow()
+
+    fun setDaemonToken(token: String) {
+        _daemonToken.value = token
+    }
+
+    fun setDaemonExecCommand(cmd: String) {
+        _daemonExecCommand.value = cmd
+    }
+
+    fun checkDaemonStatus() {
+        viewModelScope.launch(Dispatchers.IO) {
+            _isDaemonRefreshing.value = true
+            if (_daemonToken.value.isBlank()) {
+                val foundToken = AdbBridgeDaemonManager.readAuthToken()
+                if (foundToken.isNotBlank()) {
+                    _daemonToken.value = foundToken
+                }
+            }
+            val status = AdbBridgeDaemonManager.checkStatus(_daemonToken.value.ifBlank { null })
+            withContext(Dispatchers.Main) {
+                _daemonStatus.value = status
+                if (status.isOnline) {
+                    appendShellLog("🌐 Daemon Status: ONLINE | UID ${status.uid} (${status.user}) | Uptime ${status.uptimeSeconds}s")
+                }
+                _isDaemonRefreshing.value = false
+            }
+        }
+    }
+
+    fun startDaemonProcess() {
+        viewModelScope.launch(Dispatchers.IO) {
+            appendShellLog("🚀 Bắt đầu kích hoạt AdbBridgeDaemon...")
+            val launchCmd = AdbBridgeDaemonManager.getTermuxLaunchCommand()
+            val (success, result) = executeSystemPrivilegeCommand(launchCmd)
+            appendShellLog("  -> Kết quả kích hoạt: ${if (success) "Đã gửi lệnh nohup" else result}")
+            kotlinx.coroutines.delay(1200)
+            checkDaemonStatus()
+        }
+    }
+
+    fun stopDaemonProcess() {
+        viewModelScope.launch(Dispatchers.IO) {
+            appendShellLog("⏹️ Đang gửi lệnh dừng AdbBridgeDaemon...")
+            val (success, msg) = AdbBridgeDaemonManager.stopDaemon(_daemonToken.value.ifBlank { null })
+            appendShellLog("  -> $msg")
+            kotlinx.coroutines.delay(800)
+            checkDaemonStatus()
+        }
+    }
+
+    fun executeDaemonCommand(command: String? = null) {
+        val cmd = (command ?: _daemonExecCommand.value).trim()
+        if (cmd.isBlank()) return
+
+        viewModelScope.launch(Dispatchers.IO) {
+            _isExecutingDaemonCmd.value = true
+            _daemonExecOutput.value = "Đang thực thi '$cmd' qua 127.0.0.1:8765/exec ..."
+            appendShellLog("⚡ [Daemon Exec] $cmd")
+            val res = AdbBridgeDaemonManager.executeCommand(cmd, _daemonToken.value.ifBlank { null })
+            withContext(Dispatchers.Main) {
+                val outputText = buildString {
+                    appendLine("Exit Code: ${res.code} (Độ trễ: ${res.latencyMs}ms)")
+                    if (res.stdout.isNotBlank()) {
+                        appendLine("STDOUT:")
+                        appendLine(res.stdout)
+                    }
+                    if (res.stderr.isNotBlank()) {
+                        appendLine("STDERR:")
+                        appendLine(res.stderr)
+                    }
+                }.trim()
+                _daemonExecOutput.value = outputText
+                appendShellLog("  -> Kết quả (${res.latencyMs}ms): ${if (res.isSuccess) "Thành công (Code 0)" else "Lỗi (Code ${res.code})"}")
+                _isExecutingDaemonCmd.value = false
+            }
+        }
+    }
+
+    fun captureDaemonScreenshot() {
+        viewModelScope.launch(Dispatchers.IO) {
+            appendShellLog("📸 Đang yêu cầu chụp màn hình từ DaemonServer (/screenshot)...")
+            val (bitmap, msg) = AdbBridgeDaemonManager.captureScreenshot(_daemonToken.value.ifBlank { null })
+            withContext(Dispatchers.Main) {
+                _daemonScreenshot.value = bitmap
+                appendShellLog("  -> $msg")
+            }
+        }
+    }
+
+    fun runDaemonVerification() {
+        viewModelScope.launch(Dispatchers.IO) {
+            _isVerifyingDaemon.value = true
+            appendShellLog("🧪 BẮT ĐẦU CHẠY BỘ 6 BÀI KIỂM THỬ XÁC MINH DAEMON SERVER...")
+            val report = AdbBridgeDaemonManager.runVerificationSuite(_daemonToken.value.ifBlank { AdbBridgeDaemonManager.readAuthToken() })
+            withContext(Dispatchers.Main) {
+                _daemonVerificationReport.value = report
+                _isVerifyingDaemon.value = false
+                appendShellLog("📊 KẾT QUẢ KIỂM THỬ: ${report.passedTests}/${report.totalTests} ĐẠT | Độ trễ TB: ${String.format("%.2f", report.averageLatencyMs)}ms")
+                checkDaemonStatus()
+            }
+        }
+    }
+
+    fun clearDaemonVerificationReport() {
+        _daemonVerificationReport.value = null
+    }
+
+    fun clearDaemonScreenshot() {
+        _daemonScreenshot.value = null
     }
 
     fun executeBatchDebloat(useUser0Uninstall: Boolean = true) {
